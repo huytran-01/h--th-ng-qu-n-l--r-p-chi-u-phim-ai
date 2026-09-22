@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CGV Cinemas - Trải Nghiệm Điện Ảnh Đỉnh Cao Tích Hợp AI</title>
+  
+  <!-- Tailwind CSS & FontAwesome & Google Fonts -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  
+  <!-- Chart.js & Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  
+  <!-- QRCode.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cgv: {
+              red: '#E71A0F',
+              darkred: '#B8140B',
+              black: '#0F1015',
+              dark: '#161820',
+              card: '#1F222E',
+              gold: '#D4AF37',
+              golddark: '#997F24',
+              neon: '#00D2D3'
+            }
+          },
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #0F1015;
+      color: #F3F4F6;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .cgv-glow {
+      box-shadow: 0 0 25px rgba(231, 26, 15, 0.4);
+    }
+    .gold-glow {
+      box-shadow: 0 0 25px rgba(212, 175, 55, 0.35);
+    }
+    .screen-curve {
+      height: 20px;
+      border-top: 5px solid #E71A0F;
+      border-radius: 50% 50% 0 0;
+      box-shadow: 0 -8px 25px rgba(231, 26, 15, 0.6);
+    }
+    .field {
+      width: 100%;
+      border: 1px solid #374151;
+      border-radius: 0.65rem;
+      background: #161820;
+      color: #F3F4F6;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.75rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+    .field:focus { border-color: #E71A0F; }
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #161820; }
+    ::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #4B5563; }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- ==================== TOAST NOTIFICATION CONTAINER ==================== -->
+  <div id="toast-container" class="fixed top-5 right-5 z-[100] flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ==================== CGV TOP BAR ==================== -->
+  <div class="bg-gradient-to-r from-cgv-darkred via-cgv-red to-cgv-darkred py-1.5 px-4 text-center text-[11px] font-bold text-white tracking-wide shadow-md">
+    <span>🎬 CHÀO MỪNG ĐẾN VỚI CGV CULTUREPLEX • ĐẶT VÉ TRẢI NGHIỆM ĐIỆN ẢNH ĐỈNH CAO IMAX & 4DX</span>
+  </div>
+
+  <!-- ==================== HEADER & NAVBAR ==================== -->
+  <header class="sticky top-0 z-40 bg-cgv-black/95 backdrop-blur border-b border-gray-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      
+      <!-- CGV Brand Logo -->
+      <div class="flex items-center space-x-3.5 cursor-pointer" onclick="switchView('home')">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cgv-red to-orange-600 flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-red-600/40 tracking-tighter">
+          CGV
+        </div>
+        <div>
+          <div class="flex items-center space-x-1.5">
+            <span class="text-2xl font-black tracking-wider text-white">CGV</span>
+            <span class="text-xl font-bold tracking-wider text-cgv-red">CINEMAS</span>
+          </div>
+          <span class="block text-[9px] uppercase font-bold tracking-widest text-cgv-gold">Cultureplex Experience</span>
+        </div>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="hidden md:flex items-center space-x-6 font-medium text-sm">
+        <a href="javascript:void(0)" onclick="switchView('home')" class="nav-item text-cgv-red font-bold transition hover:text-red-400">
+          <i class="fa-solid fa-house mr-1.5"></i>Trang Chủ
+        </a>
+        <a href="javascript:void(0)" onclick="scrollToCustomerMovies('NOW_SHOWING')" class="nav-item text-gray-300 hover:text-white transition">
+          <i class="fa-solid fa-film mr-1.5"></i>Phim Đang Chiếu
+        </a>
+        <a href="javascript:void(0)" onclick="scrollToCustomerMovies('COMING_SOON')" class="nav-item text-gray-300 hover:text-white transition">
+          <i class="fa-solid fa-clock mr-1.5"></i>Phim Sắp Chiếu
+        </a>
+        <a href="javascript:void(0)" onclick="switchView('ai-lab')" class="nav-item text-cyan-300 hover:text-cyan-200 transition">
+          <i class="fa-solid fa-brain mr-1.5"></i>Gợi Ý AI
+        </a>
+        <a href="javascript:void(0)" onclick="switchView('account')" class="nav-item text-cgv-gold hover:text-yellow-300 transition">
+          <i class="fa-solid fa-crown mr-1.5"></i>Thành Viên CGV
+        </a>
+        <a href="javascript:void(0)" onclick="handleAdminNavClick()" id="nav-admin-link" class="nav-item text-gray-300 hover:text-white transition flex items-center">
+          <i class="fa-solid fa-shield-halved mr-1.5"></i>Quản Trị Admin
+          <span id="nav-admin-badge" class="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-red-950 text-red-400 border border-red-800 font-bold">Admin</span>
+        </a>
+      </nav>
+
+      <!-- User Profile & Action -->
+      <div class="flex items-center space-x-4">
+        <!-- Floating Chatbot Toggle -->
+        <button onclick="toggleChatbot()" class="relative p-2.5 rounded-xl bg-red-950/60 border border-red-500/30 text-red-400 hover:bg-red-900/60 transition cgv-glow" title="Trợ lý ảo AI CGV Cinema">
+          <i class="fa-solid fa-robot text-lg"></i>
+          <span class="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping"></span>
+          <span class="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full"></span>
+        </button>
+
+        <!-- Trạng thái CHƯA ĐĂNG NHẬP -->
+        <div id="auth-unlogged-section" class="flex items-center space-x-2">
+          <button onclick="openAuthModal('login')" class="px-4 py-2 rounded-xl bg-gradient-to-r from-cgv-red to-red-700 hover:from-red-600 hover:to-red-800 text-white font-bold text-xs flex items-center space-x-1.5 shadow-lg shadow-red-600/30 transition">
+            <i class="fa-solid fa-arrow-right-to-bracket"></i>
+            <span>Đăng Nhập</span>
+          </button>
+          <button onclick="openAuthModal('register')" class="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 hover:text-white font-semibold text-xs transition">
+            Đăng Ký
+          </button>
+        </div>
+
+        <!-- Trạng thái ĐÃ ĐĂNG NHẬP (Dropdown Profile & CGV Member Badge) -->
+        <div id="auth-logged-section" class="hidden relative">
+          <div onclick="toggleUserDropdown()" class="flex items-center space-x-3 cursor-pointer p-1.5 rounded-xl hover:bg-gray-800/80 transition border border-transparent hover:border-gray-700">
+            <img id="header-avatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80" alt="Avatar" class="w-9 h-9 rounded-full ring-2 ring-cgv-red/60 object-cover">
+            <div class="hidden lg:block text-left">
+              <span id="header-user-name" class="block text-xs font-bold text-white max-w-[130px] truncate">Khách hàng CGV</span>
+              <span id="header-user-role" class="block text-[10px] text-cgv-gold font-semibold flex items-center">
+                <i class="fa-solid fa-crown mr-1"></i>CGV VIP Member
+              </span>
+            </div>
+            <i class="fa-solid fa-chevron-down text-xs text-gray-400"></i>
+          </div>
+
+          <!-- Dropdown Menu -->
+          <div id="user-dropdown-menu" class="hidden absolute right-0 mt-2 w-64 rounded-2xl bg-cgv-card border border-gray-700 shadow-2xl p-2 z-50 text-xs">
+            <div class="p-3 border-b border-gray-800">
+              <p id="dropdown-user-email" class="text-[11px] text-gray-400 truncate">customer@aicinema.vn</p>
+              <div class="flex items-center justify-between mt-1.5">
+                <span id="dropdown-user-role-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-950 text-red-400 border border-red-800">CGV VIP</span>
+                <span id="dropdown-user-points" class="text-[11px] text-cgv-gold font-bold">1.250 điểm</span>
+              </div>
+            </div>
+            <div class="py-1">
+              <a href="javascript:void(0)" onclick="switchView('account'); closeUserDropdown()" class="flex items-center px-3 py-2 rounded-xl text-gray-300 hover:bg-gray-800 hover:text-white">
+                <i class="fa-solid fa-id-card w-5 text-cgv-gold"></i>Thẻ thành viên CGV
+              </a>
+              <a href="javascript:void(0)" onclick="switchView('account'); closeUserDropdown()" class="flex items-center px-3 py-2 rounded-xl text-gray-300 hover:bg-gray-800 hover:text-white">
+                <i class="fa-solid fa-ticket w-5 text-cgv-red"></i>Lịch sử vé đã mua
+              </a>
+              <a href="javascript:void(0)" id="dropdown-admin-link" onclick="switchView('admin'); closeUserDropdown()" class="hidden flex items-center px-3 py-2 rounded-xl text-red-300 hover:bg-red-950/40 hover:text-red-200">
+                <i class="fa-solid fa-shield-halved w-5 text-red-400"></i>Khu vực Quản trị Admin
+              </a>
+            </div>
+            <div class="pt-1 border-t border-gray-800">
+              <button onclick="handleLogout()" class="w-full flex items-center px-3 py-2 rounded-xl text-gray-400 hover:bg-red-950/30 hover:text-red-400 text-left">
+                <i class="fa-solid fa-right-from-bracket w-5"></i>Đăng xuất
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN CONTENT CONTAINER ==================== -->
+  <main class="flex-grow">
+    
+    <!-- VIEW 1: HOME PAGE (CGV CULTUREPLEX EXPERIENCE) -->
+    <div id="home-view">
+      
+      <!-- HERO CAROUSEL -->
+      <section class="relative h-[520px] flex items-center overflow-hidden">
+        <div class="absolute inset-0 bg-gradient-to-r from-cgv-black via-cgv-black/80 to-transparent z-10"></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-cgv-black via-transparent to-transparent z-10"></div>
+        <img src="https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1600&auto=format&fit=crop&q=80" alt="Banner" class="absolute inset-0 w-full h-full object-cover object-center filter brightness-75">
+
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-20 w-full">
+          <div class="max-w-2xl space-y-4">
+            <div class="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-cgv-red/20 border border-cgv-red/40 text-cgv-red text-xs font-black uppercase tracking-wider">
+              <i class="fa-solid fa-fire"></i>
+              <span>CGV Blockbuster • Cháy Vé Phòng Chiếu IMAX</span>
+            </div>
+            <h1 class="text-4xl sm:text-6xl font-black text-white leading-tight">Dune: Hành Tinh Cát 2</h1>
+            <p class="text-gray-300 text-sm sm:text-base line-clamp-3">
+              Paul Atreides hợp nhất với Chani và người Fremen trên con đường báo thù những kẻ đã hủy hoại gia tộc mình. Trải nghiệm kỹ xảo hình ảnh và âm thanh bùng nổ tại phòng chiếu IMAX Laser và 4DX độc quyền của CGV.
+            </p>
+            <div class="flex flex-wrap items-center gap-4 text-xs font-medium text-gray-300 pt-1">
+              <span class="px-2.5 py-1 bg-gray-800 rounded font-bold text-yellow-400"><i class="fa-solid fa-star mr-1"></i>8.6 IMDb</span>
+              <span><i class="fa-regular fa-clock mr-1"></i>166 phút</span>
+              <span class="px-2 py-0.5 bg-cyan-950 text-cyan-300 border border-cyan-800 rounded font-bold">IMAX Laser • 4DX</span>
+              <span class="px-2 py-0.5 bg-red-950 text-red-400 border border-red-800 rounded font-bold">T16</span>
+            </div>
+            <div class="pt-3 flex items-center space-x-4">
+              <button onclick="openBookingModal('mov-01')" class="px-7 py-3.5 rounded-xl bg-cgv-red hover:bg-red-700 text-white font-bold text-sm flex items-center space-x-2 transition cgv-glow shadow-lg shadow-red-600/40">
+                <i class="fa-solid fa-ticket"></i>
+                <span>Mua Vé Ngay</span>
+              </button>
+              <button onclick="openTrailerModal()" class="px-6 py-3.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 border border-gray-700 text-white font-semibold text-sm flex items-center space-x-2 transition">
+                <i class="fa-solid fa-play"></i>
+                <span>Xem Trailer</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CGV QUICK BOOKING BAR (THANH ĐẶT VÉ NHANH 1-CLICK) -->
+      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-10 relative z-30">
+        <div class="bg-cgv-card border border-gray-700/80 rounded-2xl p-4 sm:p-5 shadow-2xl backdrop-blur-md">
+          <div class="flex items-center space-x-2 text-xs font-extrabold uppercase tracking-widest text-cgv-red mb-3">
+            <i class="fa-solid fa-bolt"></i>
+            <span>ĐẶT VÉ NHANH CGV (QUICK TICKET BOOKING)</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-center">
+            <!-- 1. Chọn Phim -->
+            <div>
+              <label class="block text-[11px] font-bold text-gray-400 mb-1">1. Chọn Phim:</label>
+              <select id="qb-movie" onchange="handleQuickBookingMovieChange(this.value)" class="field font-bold text-white">
+                <option value="">-- Chọn Phim Đang Chiếu --</option>
+              </select>
+            </div>
+            <!-- 2. Chọn Rạp CGV -->
+            <div>
+              <label class="block text-[11px] font-bold text-gray-400 mb-1">2. Chọn Rạp CGV:</label>
+              <select id="qb-cinema" onchange="handleQuickBookingCinemaChange(this.value)" class="field">
+                <option value="">-- Chọn Cụm Rạp CGV --</option>
+              </select>
+            </div>
+            <!-- 3. Chọn Ngày Chiếu -->
+            <div>
+              <label class="block text-[11px] font-bold text-gray-400 mb-1">3. Chọn Ngày Xem:</label>
+              <select id="qb-date" onchange="handleQuickBookingDateChange(this.value)" class="field">
+                <option value="today">Hôm nay (22/09)</option>
+                <option value="tomorrow">Ngày mai (23/09)</option>
+                <option value="weekend">Cuối tuần (26/09)</option>
+              </select>
+            </div>
+            <!-- 4. Chọn Suất Chiếu -->
+            <div>
+              <label class="block text-[11px] font-bold text-gray-400 mb-1">4. Chọn Suất Chiếu:</label>
+              <select id="qb-showtime" class="field font-bold text-cgv-gold">
+                <option value="">-- Chọn Khung Giờ --</option>
+              </select>
+            </div>
+            <!-- 5. Nút Mua Vé Nhanh -->
+            <div class="pt-4 sm:pt-0">
+              <label class="block text-[11px] font-bold text-transparent mb-1 hidden lg:block">&nbsp;</label>
+              <button onclick="executeQuickBooking()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cgv-red to-red-700 hover:from-red-600 hover:to-red-800 text-white font-black text-xs uppercase tracking-wider transition cgv-glow shadow-lg shadow-red-600/30 flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-ticket"></i>
+                <span>MUA VÉ NHANH</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AI RECOMMENDATION SECTION -->
+      <section id="ai-recommendation-section" class="py-12 mt-6 bg-gradient-to-b from-cgv-black via-cgv-dark to-cgv-black border-y border-gray-800/60">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="flex flex-col md:flex-row md:items-end justify-between mb-8">
+            <div>
+              <div class="inline-flex items-center space-x-2 text-xs font-extrabold uppercase tracking-widest text-cyan-400 mb-1">
+                <i class="fa-solid fa-brain"></i>
+                <span>Gợi Ý Cá Nhân Hóa (Hybrid NCF + PhoBERT AI Engine)</span>
+              </div>
+              <h2 class="text-2xl sm:text-3xl font-black text-white flex items-center">
+                Phim Dành Riêng Cho Bạn
+                <span class="ml-3 px-3 py-1 text-xs font-bold rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300">AI Match 98%</span>
+              </h2>
+            </div>
+            <p class="text-gray-400 text-xs md:text-sm mt-2 md:mt-0 max-w-md">
+              Hệ thống AI phân tích sở thích thể loại và lịch sử mua vé để đề xuất những bộ phim phù hợp nhất với khẩu vị của bạn.
+            </p>
+          </div>
+
+          <!-- AI Cards Grid -->
+          <div id="ai-recommendations-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Rendered by JavaScript -->
+          </div>
+        </div>
+      </section>
+
+      <!-- CGV MOVIES CATALOG SECTION (PHÂN TRANG RIÊNG CHO KHÁCH HÀNG) -->
+      <section id="movies-section" class="py-14 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <!-- Header & Tabs: Now Showing vs Coming Soon -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-800 mb-8">
+          <div>
+            <span class="text-xs font-black uppercase tracking-widest text-cgv-red">CGV MOVIE SELECTION</span>
+            <div class="flex items-center space-x-6 mt-1">
+              <button onclick="switchCustomerMovieTab('NOW_SHOWING')" id="btn-cust-now-showing" class="text-2xl sm:text-3xl font-black text-white border-b-4 border-cgv-red pb-2 transition">
+                Phim Đang Chiếu
+              </button>
+              <button onclick="switchCustomerMovieTab('COMING_SOON')" id="btn-cust-coming-soon" class="text-2xl sm:text-3xl font-black text-gray-500 hover:text-gray-300 border-b-4 border-transparent pb-2 transition">
+                Phim Sắp Chiếu
+              </button>
+            </div>
+          </div>
+
+          <!-- Search & Genre Filter cho Khách Hàng -->
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="relative w-full sm:w-64">
+              <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+              <input type="text" id="cust-movie-search" oninput="handleCustomerMovieSearch(this.value)" placeholder="Tìm tên phim, diễn viên..." class="field pl-9">
+            </div>
+            <select id="cust-movie-genre" onchange="handleCustomerMovieGenreFilter(this.value)" class="bg-cgv-dark border border-gray-700 text-xs rounded-xl px-3 py-2 text-gray-300 focus:outline-none">
+              <option value="ALL">Tất cả thể loại</option>
+              <option value="Hành động">Hành động</option>
+              <option value="Khoa học viễn tưởng">Khoa học viễn tưởng</option>
+              <option value="Tâm lý">Tâm lý</option>
+              <option value="Kinh dị">Kinh dị</option>
+              <option value="Hoạt hình">Hoạt hình</option>
+              <option value="Gia đình">Gia đình</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Movie List Grid dành cho Khách hàng -->
+        <div id="customer-movies-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
+          <!-- Rendered by JavaScript -->
+        </div>
+
+        <!-- THANH PHÂN TRANG DÀNH RIÊNG CHO KHÁCH HÀNG -->
+        <div class="mt-8 p-4 bg-cgv-card rounded-2xl border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <span id="customer-movies-pagination-info" class="text-gray-400 font-medium">Đang tải danh sách phim...</span>
+          <div id="customer-movies-pagination-controls" class="flex items-center space-x-1.5">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+
+    <!-- VIEW 2: ADMIN WORKSPACE (PHÂN TRANG & QUẢN TRỊ RIÊNG CHO ADMIN) -->
+    <div id="admin-view" class="hidden py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <!-- Admin Top Banner -->
+      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-gray-800 mb-8">
+        <div>
+          <div class="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-red-400">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>Admin Cinema Operations Console</span>
+          </div>
+          <h1 class="text-3xl font-black text-white mt-1">Bảng Điều Hành Admin Cinema</h1>
+        </div>
+        <div class="flex items-center space-x-3">
+          <span id="admin-current-user-tag" class="px-3 py-1.5 rounded-xl bg-gray-900 border border-gray-700 text-xs text-gray-300 font-medium">
+            <!-- Rendered by JS -->
+          </span>
+          <button onclick="switchView('home')" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-sm font-semibold text-gray-200 transition">
+            <i class="fa-solid fa-arrow-left mr-2"></i>Về Trang Khách Hàng
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <div class="p-5 rounded-2xl bg-cgv-card border border-gray-800 shadow-lg">
+          <div class="flex items-center justify-between text-gray-400 text-xs font-bold mb-2">
+            <span>TỔNG VÉ BÁN HÔM NAY</span>
+            <i class="fa-solid fa-ticket text-cgv-red text-lg"></i>
+          </div>
+          <span id="kpi-total-tickets" class="text-3xl font-black text-white">--</span>
+          <span class="block text-xs text-green-400 font-semibold mt-2"><i class="fa-solid fa-arrow-trend-up mr-1"></i>Báo cáo ngày thực tế</span>
+        </div>
+
+        <div class="p-5 rounded-2xl bg-cgv-card border border-gray-800 shadow-lg">
+          <div class="flex items-center justify-between text-gray-400 text-xs font-bold mb-2">
+            <span>DOANH THU ƯỚC TÍNH</span>
+            <i class="fa-solid fa-coins text-cgv-gold text-lg"></i>
+          </div>
+          <span id="kpi-total-revenue" class="text-3xl font-black text-white">--</span>
+          <span class="block text-xs text-green-400 font-semibold mt-2"><i class="fa-solid fa-arrow-trend-up mr-1"></i>Doanh thu phòng vé</span>
+        </div>
+
+        <div class="p-5 rounded-2xl bg-cgv-card border border-gray-800 shadow-lg">
+          <div class="flex items-center justify-between text-gray-400 text-xs font-bold mb-2">
+            <span>TỶ LỆ LẤP ĐẦY TRUNG BÌNH</span>
+            <i class="fa-solid fa-chair text-cyan-400 text-lg"></i>
+          </div>
+          <span id="kpi-occupancy" class="text-3xl font-black text-white">--</span>
+          <span class="block text-xs text-cyan-400 font-semibold mt-2">Công suất phòng chiếu</span>
+        </div>
+
+        <div class="p-5 rounded-2xl bg-cgv-card border border-gray-800 shadow-lg">
+          <div class="flex items-center justify-between text-gray-400 text-xs font-bold mb-2">
+            <span>ĐỘ CHÍNH XÁC AI DỰ BÁO</span>
+            <i class="fa-solid fa-bullseye text-purple-400 text-lg"></i>
+          </div>
+          <span class="text-3xl font-black text-white">90.6%</span>
+          <span class="block text-xs text-purple-400 font-semibold mt-2">LightGBM MAPE = 9.4%</span>
+        </div>
+      </div>
+
+      <!-- Admin Tab Navigation -->
+      <div class="flex flex-wrap items-center justify-between gap-3 p-2 bg-cgv-card rounded-2xl border border-gray-800 mb-6">
+        <div class="flex flex-wrap gap-2">
+          <button onclick="switchAdminTab('movies')" id="btn-admin-tab-movies" class="admin-tab px-4 py-2.5 rounded-xl bg-cgv-red text-white text-xs font-bold transition flex items-center shadow">
+            <i class="fa-solid fa-film mr-2"></i>Quản Lý Phim (Admin)
+          </button>
+          <button onclick="switchAdminTab('showtimes')" id="btn-admin-tab-showtimes" class="admin-tab px-4 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-xs font-bold transition flex items-center hover:text-white">
+            <i class="fa-solid fa-calendar-days mr-2"></i>Quản Lý Suất Chiếu
+          </button>
+          <button onclick="switchAdminTab('users')" id="btn-admin-tab-users" class="admin-tab px-4 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-xs font-bold transition flex items-center hover:text-white">
+            <i class="fa-solid fa-users-gear mr-2"></i>Người Dùng & Phân Quyền (RBAC)
+          </button>
+          <button onclick="switchAdminTab('forecast')" id="btn-admin-tab-forecast" class="admin-tab px-4 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-xs font-bold transition flex items-center hover:text-white">
+            <i class="fa-solid fa-chart-pie mr-2"></i>Dự Báo Nhu Cầu & Lịch AI
+          </button>
+        </div>
+      </div>
+
+      <!-- ADMIN TAB 1: MOVIES MANAGEMENT (PHÂN TRANG 5 PHIM/TRANG) -->
+      <div id="admin-tab-movies" class="space-y-4">
+        <div class="p-4 rounded-2xl bg-cgv-card border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div class="flex items-center space-x-3 w-full sm:w-auto flex-1 max-w-md">
+            <div class="relative w-full">
+              <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+              <input type="text" id="admin-movie-search" oninput="handleMovieSearch(this.value)" placeholder="Tìm phim (Admin)..." class="field pl-9">
+            </div>
+            <select id="admin-movie-status-filter" onchange="handleMovieStatusFilter(this.value)" class="bg-gray-900 border border-gray-700 text-xs rounded-xl px-3 py-2 text-gray-300 focus:outline-none">
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="NOW_SHOWING">Đang chiếu</option>
+              <option value="COMING_SOON">Sắp chiếu</option>
+            </select>
+          </div>
+          <button onclick="openMovieModal('create')" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-cgv-red to-red-700 hover:from-red-600 hover:to-red-800 text-white font-bold text-xs flex items-center justify-center space-x-2 shadow-lg shadow-red-600/30 transition">
+            <i class="fa-solid fa-plus"></i>
+            <span>Thêm Phim Mới</span>
+          </button>
+        </div>
+
+        <div class="rounded-2xl bg-cgv-card border border-gray-800 overflow-hidden shadow-xl">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-gray-900/80 text-gray-400 uppercase tracking-wider text-[11px] border-b border-gray-800">
+                <tr>
+                  <th class="p-4">Phim & Poster</th>
+                  <th class="p-4">Trạng thái / Thể loại</th>
+                  <th class="p-4">Đạo diễn & Diễn viên</th>
+                  <th class="p-4">Đánh giá IMDb</th>
+                  <th class="p-4">Hot / Trending</th>
+                  <th class="p-4 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="admin-movies-table-body" class="divide-y divide-gray-800">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <div class="p-4 bg-gray-900/60 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <span id="admin-movies-pagination-info" class="text-gray-400">Đang tải...</span>
+            <div id="admin-movies-pagination-controls" class="flex items-center space-x-1.5"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADMIN TAB 2: SHOWTIMES MANAGEMENT (PHÂN TRANG 5 SUẤT/TRANG) -->
+      <div id="admin-tab-showtimes" class="hidden space-y-4">
+        <div class="p-4 rounded-2xl bg-cgv-card border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div class="flex items-center space-x-3 w-full sm:w-auto flex-1 max-w-md">
+            <div class="relative w-full">
+              <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+              <input type="text" id="admin-showtime-search" oninput="handleShowtimeSearch(this.value)" placeholder="Tìm theo tên phim, phòng, rạp..." class="field pl-9">
+            </div>
+            <select id="admin-showtime-room-filter" onchange="handleShowtimeRoomFilter(this.value)" class="bg-gray-900 border border-gray-700 text-xs rounded-xl px-3 py-2 text-gray-300 focus:outline-none">
+              <option value="ALL">Tất cả phòng chiếu</option>
+              <option value="room-01">Phòng 01 - IMAX</option>
+              <option value="room-02">Phòng 02 - VIP</option>
+              <option value="room-03">Phòng 03 - 2D Dolby</option>
+              <option value="room-04">Phòng 04 - 4DX</option>
+              <option value="room-05">Phòng 05 - ScreenX</option>
+            </select>
+          </div>
+          <button onclick="openShowtimeModal('create')" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-cgv-red to-red-700 hover:from-red-600 hover:to-red-800 text-white font-bold text-xs flex items-center justify-center space-x-2 shadow-lg shadow-red-600/30 transition">
+            <i class="fa-solid fa-plus"></i>
+            <span>Tạo Suất Chiếu Mới</span>
+          </button>
+        </div>
+
+        <div class="rounded-2xl bg-cgv-card border border-gray-800 overflow-hidden shadow-xl">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-gray-900/80 text-gray-400 uppercase tracking-wider text-[11px] border-b border-gray-800">
+                <tr>
+                  <th class="p-4">Mã suất</th>
+                  <th class="p-4">Phim</th>
+                  <th class="p-4">Cụm rạp & Phòng</th>
+                  <th class="p-4">Thời gian chiếu</th>
+                  <th class="p-4">Giá vé cơ sở</th>
+                  <th class="p-4 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="admin-showtimes-table-body" class="divide-y divide-gray-800"></tbody>
+            </table>
+          </div>
+
+          <div class="p-4 bg-gray-900/60 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <span id="admin-showtimes-pagination-info" class="text-gray-400">Đang tải...</span>
+            <div id="admin-showtimes-pagination-controls" class="flex items-center space-x-1.5"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADMIN TAB 3: USERS & RBAC (PHÂN TRANG 5 USER/TRANG) -->
+      <div id="admin-tab-users" class="hidden space-y-4">
+        <div class="p-4 rounded-2xl bg-cgv-card border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div class="flex items-center space-x-3 w-full sm:w-auto flex-1 max-w-md">
+            <div class="relative w-full">
+              <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+              <input type="text" id="admin-user-search" oninput="handleUserSearch(this.value)" placeholder="Tìm theo tên, email, sđt, mã thẻ..." class="field pl-9">
+            </div>
+            <select id="admin-user-role-filter" onchange="handleUserRoleFilter(this.value)" class="bg-gray-900 border border-gray-700 text-xs rounded-xl px-3 py-2 text-gray-300 focus:outline-none">
+              <option value="ALL">Tất cả vai trò</option>
+              <option value="CUSTOMER">CUSTOMER (Khách hàng)</option>
+              <option value="STAFF">STAFF (Nhân viên POS)</option>
+              <option value="MANAGER">MANAGER (Quản lý)</option>
+              <option value="ADMIN">ADMIN (Quản trị viên)</option>
+            </select>
+          </div>
+          <button onclick="openUserModal('create')" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-gradient-to-r from-cgv-gold to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 text-black font-black text-xs flex items-center justify-center space-x-2 shadow-lg shadow-yellow-600/30 transition">
+            <i class="fa-solid fa-user-plus"></i>
+            <span>Thêm Người Dùng Mới</span>
+          </button>
+        </div>
+
+        <div class="rounded-2xl bg-cgv-card border border-gray-800 overflow-hidden shadow-xl">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-gray-900/80 text-gray-400 uppercase tracking-wider text-[11px] border-b border-gray-800">
+                <tr>
+                  <th class="p-4">Người dùng & Thẻ CGV</th>
+                  <th class="p-4">Thông tin liên hệ</th>
+                  <th class="p-4">Phân quyền vai trò (RBAC)</th>
+                  <th class="p-4">Hạng & Tổng chi tiêu</th>
+                  <th class="p-4">Trạng thái</th>
+                  <th class="p-4 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users-table-body" class="divide-y divide-gray-800"></tbody>
+            </table>
+          </div>
+
+          <div class="p-4 bg-gray-900/60 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <span id="admin-users-pagination-info" class="text-gray-400">Đang tải...</span>
+            <div id="admin-users-pagination-controls" class="flex items-center space-x-1.5"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADMIN TAB 4: FORECAST & AI GOVERNANCE -->
+      <div id="admin-tab-forecast" class="hidden space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <div class="lg:col-span-7 p-6 rounded-2xl bg-cgv-card border border-gray-800">
+            <div class="flex items-center justify-between mb-6">
+              <div>
+                <h3 class="text-lg font-bold text-white">Dự Báo Tỷ Lệ Lấp Đầy Ghế Theo Khung Giờ</h3>
+                <p class="text-xs text-gray-400">Mô hình hồi quy chuỗi thời gian LightGBM phân tích 6 khung ca chiếu</p>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs font-bold bg-purple-950 text-purple-300 border border-purple-800">AI Model Live</span>
+            </div>
+            <div class="h-72">
+              <canvas id="demandForecastChart"></canvas>
+            </div>
+          </div>
+
+          <div class="lg:col-span-5 p-6 rounded-2xl bg-cgv-card border border-gray-800">
+            <h3 class="text-lg font-bold text-white mb-2">Khuyến Nghị Lịch Chiếu Tối Ưu</h3>
+            <p class="text-xs text-gray-400 mb-5">Đề xuất phân bổ phòng chiếu và định giá vé từ thuật toán AI</p>
+
+            <div id="ai-optimization-list" class="space-y-3.5"></div>
+
+            <button onclick="approveAISchedule()" class="w-full mt-6 py-3 rounded-xl bg-gradient-to-r from-cgv-red to-red-700 hover:from-red-600 hover:to-red-800 text-white font-bold text-sm transition shadow-lg shadow-red-600/30">
+              <i class="fa-solid fa-check-double mr-2"></i>Phê Duyệt & Xuất Bản Lịch Chiếu AI
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- VIEW 3: AI LAB & RECOMMENDATION STUDIO -->
+    <div id="ai-lab-view" class="hidden py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-6 border-b border-gray-800 mb-8">
+        <div>
+          <span class="text-xs uppercase tracking-widest text-cyan-400 font-bold">Hybrid NCF + Content + PhoBERT</span>
+          <h1 class="text-3xl font-black text-white">CGV AI Recommendation Studio</h1>
+          <p class="text-sm text-gray-400 mt-2 max-w-2xl">Khám phá lý do vì sao một bộ phim được hệ thống gợi ý cho bạn, điều chỉnh gu phim và đánh giá phản hồi.</p>
+        </div>
+        <button onclick="switchView('home')" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-200 text-sm font-semibold hover:bg-gray-700 transition">
+          <i class="fa-solid fa-arrow-left mr-2"></i>Về trang chủ
+        </button>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <aside class="lg:col-span-4 p-6 rounded-2xl bg-cgv-card border border-gray-800">
+          <div class="flex items-center justify-between">
+            <div>
+              <span class="text-[10px] text-gray-500 uppercase tracking-widest">User profile</span>
+              <h2 class="text-xl font-black text-white">Hồ sơ gu phim</h2>
+            </div>
+            <i class="fa-solid fa-fingerprint text-cyan-400 text-2xl"></i>
+          </div>
+          <div id="ai-profile-content" class="mt-5"></div>
+          <div class="mt-5 pt-5 border-t border-gray-800">
+            <p class="text-xs font-bold text-gray-300 mb-3">Chọn khẩu vị để thử mô hình AI:</p>
+            <div id="genre-preferences" class="flex flex-wrap gap-2"></div>
+            <button onclick="refreshPersonalizedAI()" class="w-full mt-4 py-2.5 rounded-xl bg-cgv-red hover:bg-red-700 text-white text-xs font-bold transition">
+              <i class="fa-solid fa-arrows-rotate mr-2"></i>Cập nhật gợi ý AI
+            </button>
+          </div>
+        </aside>
+        <div class="lg:col-span-8">
+          <div id="ai-lab-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 4: CGV MEMBERSHIP & ACCOUNT VIEW (VIRTUAL CGV CARD & PHÂN TRANG VÉ) -->
+    <div id="account-view" class="hidden py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-end justify-between border-b border-gray-800 pb-6 mb-8">
+        <div>
+          <span class="text-xs uppercase tracking-widest text-cgv-gold font-bold">Thành Viên CGV Cultureplex</span>
+          <h1 class="text-3xl font-black text-white">CGV Membership & Vé Của Tôi</h1>
+        </div>
+        <button onclick="switchView('home')" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-200 text-sm font-semibold hover:bg-gray-700 transition">
+          <i class="fa-solid fa-arrow-left mr-2"></i>Về trang chủ
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <!-- Cột Trái: THẺ THÀNH VIÊN CGV ẢO (VIRTUAL CGV CARD) & HỒ SƠ -->
+        <div class="lg:col-span-5 space-y-6">
+          
+          <!-- THẺ CGV ĐIỆN TỬ SANG TRỌNG -->
+          <div id="virtual-cgv-card" class="rounded-3xl p-6 bg-gradient-to-br from-red-900 via-cgv-dark to-black border-2 border-cgv-gold/60 shadow-2xl relative overflow-hidden gold-glow">
+            <!-- Background Watermark -->
+            <div class="absolute -right-6 -bottom-6 text-8xl font-black text-white/5 select-none pointer-events-none">
+              CGV
+            </div>
+
+            <!-- Card Header -->
+            <div class="flex items-center justify-between pb-4 border-b border-white/10">
+              <div class="flex items-center space-x-2">
+                <span class="text-2xl font-black text-white tracking-wider">CGV</span>
+                <span class="text-xs uppercase tracking-widest text-cgv-gold font-bold">Cultureplex</span>
+              </div>
+              <span id="cgv-card-tier-badge" class="px-3 py-1 rounded-full text-xs font-black bg-cgv-gold text-black shadow">
+                VIP MEMBER
+              </span>
+            </div>
+
+            <!-- Card Chip & Number -->
+            <div class="my-5">
+              <div class="w-10 h-8 rounded-md bg-gradient-to-r from-yellow-300 to-yellow-600 mb-3 shadow-inner"></div>
+              <span class="text-[10px] text-gray-400 uppercase tracking-widest block">Mã Thẻ Thành Viên</span>
+              <span id="cgv-card-number" class="text-lg sm:text-xl font-mono font-bold tracking-widest text-white">
+                9999-8888-2401-1250
+              </span>
+            </div>
+
+            <!-- Card Holder & Points -->
+            <div class="flex items-end justify-between pt-2">
+              <div>
+                <span class="text-[10px] text-gray-400 uppercase tracking-widest block">Chủ thẻ</span>
+                <span id="cgv-card-name" class="text-sm font-bold text-white uppercase tracking-wider block">
+                  Khách hàng CGV VIP
+                </span>
+              </div>
+              <div class="text-right">
+                <span class="text-[10px] text-gray-400 uppercase tracking-widest block">Điểm CGV</span>
+                <span id="cgv-card-points" class="text-base font-black text-cgv-gold">
+                  1.250 P
+                </span>
+              </div>
+            </div>
+
+            <!-- Simulated SVG Barcode -->
+            <div class="mt-4 pt-3 border-t border-white/10 flex flex-col items-center">
+              <div id="cgv-card-barcode" class="h-9 w-full flex items-center justify-between px-2 bg-white/90 rounded p-1">
+                <!-- Generated by JS -->
+              </div>
+              <span class="text-[9px] text-gray-400 mt-1 font-mono">Quét mã vạch tại quầy vé hoặc máy POS CGV</span>
+            </div>
+          </div>
+
+          <!-- Thông tin hồ sơ chỉnh sửa -->
+          <div class="p-6 rounded-2xl bg-cgv-card border border-gray-800">
+            <h3 class="font-bold text-white text-sm mb-4"><i class="fa-solid fa-user-pen mr-2 text-cgv-red"></i>Cập nhật thông tin thành viên</h3>
+            <label class="block text-xs text-gray-400 font-semibold mb-3">Tên hiển thị:
+              <input id="account-name" value="" class="field mt-1">
+            </label>
+            <label class="block text-xs text-gray-400 font-semibold mb-4">Số điện thoại:
+              <input id="account-phone" value="" class="field mt-1">
+            </label>
+            <button onclick="saveAccountProfile()" class="w-full py-2.5 rounded-xl bg-cgv-red hover:bg-red-700 text-white text-xs font-bold transition">
+              Lưu thông tin hồ sơ
+            </button>
+          </div>
+
+        </div>
+
+        <!-- Cột Phải: LỊCH SỬ VÉ ĐÃ MUA (PHÂN TRANG RIÊNG CHO KHÁCH HÀNG) -->
+        <div class="lg:col-span-7 p-6 rounded-2xl bg-cgv-card border border-gray-800 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-5">
+              <div>
+                <span class="text-[10px] uppercase tracking-widest text-cgv-red font-bold">Booking history</span>
+                <h2 class="text-xl font-black text-white">Vé Đã Đặt & Mã QR Điện Tử</h2>
+              </div>
+              <span class="text-xs text-gray-400">Xuất trình mã QR tại cửa soát vé</span>
+            </div>
+
+            <!-- Danh sách vé -->
+            <div id="account-bookings" class="space-y-3.5">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+
+          <!-- Phân trang lịch sử vé khách hàng -->
+          <div class="mt-6 pt-4 border-t border-gray-800 flex items-center justify-between text-xs">
+            <span id="cust-bookings-pagination-info" class="text-gray-400">Đang tải...</span>
+            <div id="cust-bookings-pagination-controls" class="flex items-center space-x-1.5"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ==================== AUTH MODAL (ĐĂNG NHẬP / ĐĂNG KÝ CHUẨN CGV) ==================== -->
+  <div id="auth-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-cgv-dark border border-gray-700 rounded-3xl max-w-md w-full shadow-2xl p-6 sm:p-7 relative overflow-hidden">
+      
+      <!-- Close Button -->
+      <button onclick="closeAuthModal()" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center transition">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <!-- Logo & Header -->
+      <div class="text-center mb-6">
+        <div class="w-12 h-12 mx-auto rounded-2xl bg-gradient-to-tr from-cgv-red to-orange-600 flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-red-600/40 mb-3">
+          CGV
+        </div>
+        <h3 id="auth-modal-title" class="text-xl font-black text-white">Đăng Nhập Khách Hàng CGV</h3>
+        <p class="text-xs text-gray-400 mt-1">Nhận ưu đãi thành viên và tích lũy điểm thưởng CGV Points</p>
+      </div>
+
+      <!-- Tab Switcher -->
+      <div class="flex bg-gray-900 p-1 rounded-xl mb-5 border border-gray-800">
+        <button id="auth-tab-login" onclick="switchAuthTab('login')" class="flex-1 py-2 text-xs font-bold rounded-lg bg-cgv-red text-white transition">
+          Đăng Nhập
+        </button>
+        <button id="auth-tab-register" onclick="switchAuthTab('register')" class="flex-1 py-2 text-xs font-bold rounded-lg text-gray-400 hover:text-white transition">
+          Đăng Ký Thành Viên
+        </button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" onsubmit="handleLoginSubmit(event)" class="space-y-3.5">
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Email đăng ký:</label>
+          <div class="relative">
+            <i class="fa-solid fa-envelope absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
+            <input type="email" id="login-email" required placeholder="customer@aicinema.vn" class="field pl-9" value="customer@aicinema.vn">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Mật khẩu:</label>
+          <div class="relative">
+            <i class="fa-solid fa-lock absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
+            <input type="password" id="login-password" required placeholder="••••••" class="field pl-9" value="123456">
+          </div>
+        </div>
+        <button type="submit" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cgv-red to-red-700 hover:from-red-600 hover:to-red-800 text-white font-bold text-xs shadow-lg shadow-red-600/30 transition mt-2">
+          Đăng Nhập Ngay
+        </button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" onsubmit="handleRegisterSubmit(event)" class="hidden space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Họ và tên chủ thẻ (*):</label>
+          <input type="text" id="reg-name" required placeholder="Nguyễn Văn A" class="field">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Email (*):</label>
+          <input type="email" id="reg-email" required placeholder="name@domain.com" class="field">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Số điện thoại:</label>
+          <input type="tel" id="reg-phone" placeholder="0912345678" class="field">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Mật khẩu (*):</label>
+          <input type="password" id="reg-password" required placeholder="Tối thiểu 6 ký tự" class="field">
+        </div>
+        <button type="submit" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cgv-gold to-yellow-600 hover:from-yellow-500 hover:to-yellow-700 text-black font-black text-xs shadow-lg shadow-yellow-600/30 transition mt-2">
+          Mở Thẻ CGV & Nhận 100 Điểm Thưởng
+        </button>
+      </form>
+
+      <!-- Quick Login Section (1-Click Demo) -->
+      <div class="mt-6 pt-5 border-t border-gray-800 text-center">
+        <span class="block text-[10px] uppercase tracking-wider text-gray-500 font-bold mb-2.5">
+          <i class="fa-solid fa-bolt text-cgv-gold mr-1"></i>Đăng Nhập Nhanh 1-Click (Tài Khoản Demo)
+        </span>
+        <div class="grid grid-cols-2 gap-2">
+          <button onclick="quickLogin('customer@aicinema.vn', '123456')" type="button" class="p-2 rounded-xl bg-gray-800/80 hover:bg-gray-700 border border-gray-700 text-left transition flex items-center space-x-2">
+            <span class="w-6 h-6 rounded-lg bg-yellow-500/20 text-yellow-400 flex items-center justify-center text-[10px]"><i class="fa-solid fa-crown"></i></span>
+            <div>
+              <span class="block text-[11px] font-bold text-white">Khách hàng</span>
+              <span class="block text-[9px] text-gray-400">CGV VIP (1.250 P)</span>
+            </div>
+          </button>
+          <button onclick="quickLogin('admin@aicinema.vn', 'admin123')" type="button" class="p-2 rounded-xl bg-gray-800/80 hover:bg-gray-700 border border-red-800/50 text-left transition flex items-center space-x-2">
+            <span class="w-6 h-6 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center text-[10px]"><i class="fa-solid fa-shield"></i></span>
+            <div>
+              <span class="block text-[11px] font-bold text-red-400">Admin Toàn Quyền</span>
+              <span class="block text-[9px] text-gray-400">Quản trị viên</span>
+            </div>
+          </button>
+          <button onclick="quickLogin('huy@aicinema.vn', '123456')" type="button" class="p-2 rounded-xl bg-gray-800/80 hover:bg-gray-700 border border-gray-700 text-left transition flex items-center space-x-2">
+            <span class="w-6 h-6 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px]"><i class="fa-solid fa-user-tie"></i></span>
+            <div>
+              <span class="block text-[11px] font-bold text-white">Quản lý rạp</span>
+              <span class="block text-[9px] text-gray-400">Phim & Suất chiếu</span>
+            </div>
+          </button>
+          <button onclick="quickLogin('minhanh@aicinema.vn', '123456')" type="button" class="p-2 rounded-xl bg-gray-800/80 hover:bg-gray-700 border border-gray-700 text-left transition flex items-center space-x-2">
+            <span class="w-6 h-6 rounded-lg bg-green-500/20 text-green-400 flex items-center justify-center text-[10px]"><i class="fa-solid fa-cash-register"></i></span>
+            <div>
+              <span class="block text-[11px] font-bold text-white">Nhân viên POS</span>
+              <span class="block text-[9px] text-gray-400">Bán & Soát vé</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== MODAL THÊM / SỬA PHIM ADMIN ==================== -->
+  <div id="movie-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-cgv-dark border border-gray-700 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 sm:p-7">
+      <div class="flex items-center justify-between pb-4 border-b border-gray-800 mb-5">
+        <h3 id="movie-modal-title" class="text-xl font-black text-white">Thêm Phim Mới</h3>
+        <button onclick="closeMovieModal()" class="w-8 h-8 rounded-full bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <form id="movie-form" onsubmit="handleMovieFormSubmit(event)" class="space-y-4">
+        <input type="hidden" id="movie-form-id">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Tên phim (*):</label>
+            <input type="text" id="movie-title" required placeholder="Dune: Hành Tinh Cát 2" class="field">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Tên gốc tiếng Anh:</label>
+            <input type="text" id="movie-original-title" placeholder="Dune: Part Two" class="field">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Trạng thái phát hành:</label>
+            <select id="movie-status" class="field">
+              <option value="NOW_SHOWING">Đang Chiếu (Now Showing)</option>
+              <option value="COMING_SOON">Sắp Chiếu (Coming Soon)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Thời lượng (phút):</label>
+            <input type="number" id="movie-duration" required min="30" max="360" value="120" class="field">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Độ tuổi xem:</label>
+            <select id="movie-age-rating" class="field">
+              <option value="P">P (Mọi lứa tuổi)</option>
+              <option value="T13">T13 (Trên 13 tuổi)</option>
+              <option value="T16" selected>T16 (Trên 16 tuổi)</option>
+              <option value="T18">T18 (Trên 18 tuổi)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Thể loại (phân cách dấu phẩy):</label>
+            <input type="text" id="movie-genres" required placeholder="Hành động, Khoa học viễn tưởng" class="field">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Định dạng (IMAX, 4DX, 2D...):</label>
+            <input type="text" id="movie-formats" placeholder="IMAX, 4DX, 2D" class="field">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Đạo diễn:</label>
+            <input type="text" id="movie-director" placeholder="Denis Villeneuve" class="field">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Điểm IMDb (0-10):</label>
+            <input type="number" id="movie-imdb" step="0.1" min="0" max="10" value="8.0" class="field">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Diễn viên chính (phân cách dấu phẩy):</label>
+          <input type="text" id="movie-cast" placeholder="Timothée Chalamet, Zendaya, Rebecca Ferguson" class="field">
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Link ảnh Poster (URL):</label>
+            <input type="url" id="movie-poster" placeholder="https://images.unsplash.com/..." class="field">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Điểm Trending (0 - 100):</label>
+            <input type="number" id="movie-trending" min="0" max="100" value="90" class="field">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Tóm tắt nội dung:</label>
+          <textarea id="movie-desc" rows="3" placeholder="Mô tả tóm tắt nội dung phim..." class="field"></textarea>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <input type="checkbox" id="movie-is-hot" class="rounded bg-gray-900 border-gray-700 text-cgv-red focus:ring-0">
+          <label for="movie-is-hot" class="text-xs font-bold text-yellow-400 cursor-pointer">
+            <i class="fa-solid fa-fire mr-1"></i>Đánh dấu là Phim Hot / Bom tấn CGV
+          </label>
+        </div>
+
+        <div class="pt-4 border-t border-gray-800 flex justify-end space-x-3">
+          <button type="button" onclick="closeMovieModal()" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 text-xs font-semibold hover:bg-gray-700">Hủy</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-cgv-red hover:bg-red-700 text-white text-xs font-bold transition">Lưu Dữ Liệu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL THÊM / SỬA SUẤT CHIẾU ADMIN ==================== -->
+  <div id="showtime-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-cgv-dark border border-gray-700 rounded-2xl max-w-lg w-full shadow-2xl p-6">
+      <div class="flex items-center justify-between pb-4 border-b border-gray-800 mb-5">
+        <h3 id="showtime-modal-title" class="text-xl font-black text-white">Tạo Suất Chiếu Mới</h3>
+        <button onclick="closeShowtimeModal()" class="w-8 h-8 rounded-full bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <form id="showtime-form" onsubmit="handleShowtimeFormSubmit(event)" class="space-y-4">
+        <input type="hidden" id="showtime-form-id">
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Chọn phim:</label>
+          <select id="showtime-movie-id" required class="field">
+            <!-- Rendered by JS -->
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Chọn phòng chiếu:</label>
+          <select id="showtime-room-id" required class="field">
+            <option value="room-01">Phòng 01 - IMAX Laser (80 ghế)</option>
+            <option value="room-02">Phòng 02 - Gold Class VIP (40 ghế)</option>
+            <option value="room-03">Phòng 03 - 2D Dolby Atmos (80 ghế)</option>
+            <option value="room-04">Phòng 04 - 4DX Dynamic (60 ghế)</option>
+            <option value="room-05">Phòng 05 - ScreenX 270° (80 ghế)</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Thời gian bắt đầu:</label>
+            <input type="text" id="showtime-start" required placeholder="2026-09-23 19:30" class="field">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Thời gian kết thúc:</label>
+            <input type="text" id="showtime-end" required placeholder="2026-09-23 22:00" class="field">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Giá vé cơ sở (VNĐ):</label>
+          <input type="number" id="showtime-price" required step="5000" min="50000" value="130000" class="field">
+        </div>
+        <div class="pt-4 border-t border-gray-800 flex justify-end space-x-3">
+          <button type="button" onclick="closeShowtimeModal()" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 text-xs font-semibold hover:bg-gray-700">Hủy</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-cgv-red hover:bg-red-700 text-white text-xs font-bold transition">Lưu Suất Chiếu</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL THÊM / SỬA NGƯỜI DÙNG ADMIN ==================== -->
+  <div id="user-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-cgv-dark border border-gray-700 rounded-2xl max-w-lg w-full shadow-2xl p-6">
+      <div class="flex items-center justify-between pb-4 border-b border-gray-800 mb-5">
+        <h3 id="user-modal-title" class="text-xl font-black text-white">Thêm Người Dùng</h3>
+        <button onclick="closeUserModal()" class="w-8 h-8 rounded-full bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <form id="user-form" onsubmit="handleUserFormSubmit(event)" class="space-y-3.5">
+        <input type="hidden" id="user-form-id">
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Họ và tên (*):</label>
+          <input type="text" id="user-name" required placeholder="Ngoc Huy" class="field">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Email (*):</label>
+          <input type="email" id="user-email" required placeholder="admin@aicinema.vn" class="field">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Mật khẩu (*):</label>
+          <input type="password" id="user-password" placeholder="Nhập mật khẩu" class="field">
+          <span class="block text-[10px] text-gray-500 mt-0.5">Để trống nếu không muốn đổi mật khẩu khi cập nhật</span>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-gray-300 mb-1">Số điện thoại:</label>
+          <input type="tel" id="user-phone" placeholder="0903003003" class="field">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Phân quyền Vai trò (Role):</label>
+            <select id="user-role" class="field">
+              <option value="CUSTOMER">CUSTOMER (Khách hàng)</option>
+              <option value="STAFF">STAFF (Nhân viên POS)</option>
+              <option value="MANAGER">MANAGER (Quản lý rạp)</option>
+              <option value="ADMIN">ADMIN (Quản trị viên)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-gray-300 mb-1">Hạng Thành Viên CGV:</label>
+            <select id="user-tier" class="field">
+              <option value="MEMBER">CGV MEMBER</option>
+              <option value="VIP">CGV VIP</option>
+              <option value="VVIP">CGV VVIP</option>
+              <option value="STAFF">STAFF / INTERNAL</option>
+            </select>
+          </div>
+        </div>
+        <div class="pt-4 border-t border-gray-800 flex justify-end space-x-3">
+          <button type="button" onclick="closeUserModal()" class="px-4 py-2 rounded-xl bg-gray-800 text-gray-300 text-xs font-semibold hover:bg-gray-700">Hủy</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-cgv-gold hover:bg-yellow-600 text-black text-xs font-bold transition">Lưu Tài Khoản</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== MODAL XÁC NHẬN XÓA CHUNG ==================== -->
+  <div id="confirm-delete-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-cgv-dark border border-red-800/60 rounded-2xl max-w-sm w-full shadow-2xl p-6 text-center">
+      <div class="w-12 h-12 mx-auto rounded-full bg-red-950 text-red-400 flex items-center justify-center text-xl mb-3 border border-red-800">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <h3 class="text-base font-black text-white">Xác Nhận Xóa</h3>
+      <p id="confirm-delete-message" class="text-xs text-gray-400 mt-2 leading-relaxed">
+        Bạn có chắc chắn muốn xóa bản ghi này? Thao tác này không thể hoàn tác.
+      </p>
+      <div class="mt-5 flex space-x-3">
+        <button onclick="closeConfirmDeleteModal()" class="flex-1 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs">
+          Hủy Bỏ
+        </button>
+        <button id="btn-confirm-delete-execute" class="flex-1 py-2.5 rounded-xl bg-cgv-red hover:bg-red-700 text-white font-bold text-xs shadow-lg shadow-red-600/30">
+          Xóa Vĩnh Viễn
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== BOOKING & SEAT SELECTION MODAL ==================== -->
+  <div id="booking-modal" class="fixed inset-0 z-50 hidden bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-cgv-dark border border-gray-700 rounded-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto shadow-2xl p-6 sm:p-8">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-4 border-b border-gray-800">
+        <div>
+          <span id="modal-movie-genres" class="text-xs font-semibold text-cgv-red">Khoa học viễn tưởng</span>
+          <h2 id="modal-movie-title" class="text-2xl font-black text-white">Tên Phim Đang Chọn</h2>
+        </div>
+        <button onclick="closeBookingModal()" class="w-9 h-9 rounded-full bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Showtime Selector -->
+      <div class="py-4">
+        <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Chọn Suất Chiếu Tại Rạp CGV:</label>
+        <div id="modal-showtimes-container" class="flex flex-wrap gap-2.5">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Real-Time Countdown Banner -->
+      <div id="lock-countdown-banner" class="hidden my-3 p-3 rounded-xl bg-yellow-950/70 border border-yellow-500/50 flex items-center justify-between text-yellow-300 text-xs">
+        <div class="flex items-center space-x-2">
+          <i class="fa-solid fa-clock animate-spin"></i>
+          <span>Ghế đang được giữ tạm thời:</span>
+        </div>
+        <span id="lock-timer" class="text-base font-black tracking-widest text-yellow-400">10:00</span>
+      </div>
+
+      <!-- Cinema Screen Curve -->
+      <div class="my-6 text-center">
+        <div class="screen-curve w-3/4 mx-auto mb-2"></div>
+        <span class="text-[11px] uppercase tracking-widest text-gray-500 font-bold">MÀN HÌNH CHIẾU CGV CINEMAS (SCREEN)</span>
+      </div>
+
+      <!-- Seat Map Matrix -->
+      <div class="overflow-x-auto py-2">
+        <div id="seat-map-grid" class="flex flex-col items-center space-y-2 min-w-[500px]">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Seat Legend -->
+      <div class="flex flex-wrap items-center justify-center gap-6 py-4 border-t border-gray-800 text-xs text-gray-400">
+        <div class="flex items-center space-x-2"><span class="w-4 h-4 rounded bg-gray-700 border border-gray-600"></span><span>Ghế thường (Standard)</span></div>
+        <div class="flex items-center space-x-2"><span class="w-4 h-4 rounded bg-yellow-600/80 border border-yellow-500"></span><span>Ghế VIP</span></div>
+        <div class="flex items-center space-x-2"><span class="w-4 h-4 rounded bg-pink-600/80 border border-pink-500"></span><span>Ghế Đôi Sweetbox</span></div>
+        <div class="flex items-center space-x-2"><span class="w-4 h-4 rounded bg-cgv-red"></span><span>Đang chọn</span></div>
+        <div class="flex items-center space-x-2"><span class="w-4 h-4 rounded bg-red-950 text-red-500 border border-red-800"></span><span>Đã bán</span></div>
+      </div>
+
+      <!-- F&B Combos Add-on -->
+      <div class="py-4 border-t border-gray-800">
+        <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">Combo Bắp Rang & Nước Ngọt (CGV Concession):</label>
+        <div id="combos-container" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Checkout Summary & CTA -->
+      <div class="pt-4 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div>
+          <span class="text-xs text-gray-400">Tổng thanh toán dự kiến:</span>
+          <div class="text-2xl font-black text-cgv-red">
+            <span id="modal-total-price">0</span> VNĐ
+          </div>
+          <span id="modal-selected-summary" class="text-[11px] text-gray-400">Chưa chọn ghế</span>
+        </div>
+        <button onclick="handleCheckout()" id="checkout-button" disabled class="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-cgv-red hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm transition cgv-glow">
+          <i class="fa-solid fa-credit-card mr-2"></i>Thanh Toán & Xuất Vé
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================== DIGITAL TICKET & QR MODAL ==================== -->
+  <div id="ticket-modal" class="fixed inset-0 z-50 hidden bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-cgv-dark border border-gray-700 rounded-2xl max-w-md w-full shadow-2xl p-6 sm:p-7 text-center">
+      <div class="w-12 h-12 mx-auto rounded-full bg-green-500/20 text-green-400 flex items-center justify-center text-2xl mb-4 border border-green-500/30">
+        <i class="fa-solid fa-circle-check"></i>
+      </div>
+      <h2 class="text-xl font-black text-white mb-1">Đặt Vé Thành Công!</h2>
+      <p class="text-xs text-gray-400 mb-6">Vé điện tử CGV của bạn đã sẵn sàng để quét tại cửa soát vé.</p>
+
+      <!-- Ticket Card -->
+      <div class="bg-cgv-card border border-gray-700 rounded-2xl p-5 text-left text-xs space-y-2.5 relative">
+        <div class="pb-2.5 border-b border-gray-700">
+          <span id="ticket-cinema" class="text-[10px] text-cgv-red uppercase font-black tracking-wider">CGV VINCOM LANDMARK 81</span>
+          <h3 id="ticket-movie-title" class="text-base font-black text-white">Dune: Hành Tinh Cát 2</h3>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-gray-300">
+          <div><span class="text-gray-500 block">Mã vé:</span><span id="ticket-code" class="font-bold text-cgv-gold font-mono">CGV-889911</span></div>
+          <div><span class="text-gray-500 block">Phòng chiếu:</span><span id="ticket-room" class="font-bold text-white">Phòng 01 - IMAX</span></div>
+          <div><span class="text-gray-500 block">Suất chiếu:</span><span id="ticket-time" class="font-bold text-white">18:30</span></div>
+          <div><span class="text-gray-500 block">Vị trí ghế:</span><span id="ticket-seats" class="font-bold text-cgv-red text-sm">D5, D6</span></div>
+        </div>
+
+        <div class="pt-3 border-t border-gray-700 text-center">
+          <div id="ticket-qrcode" class="bg-white p-3 rounded-xl inline-block shadow-inner mb-2"></div>
+          <span class="block text-[10px] text-gray-400 font-mono">Mã QR điện tử chính thức của CGV</span>
+        </div>
+      </div>
+
+      <div class="mt-6 flex space-x-3">
+        <button onclick="closeTicketModal()" class="flex-1 py-3 rounded-xl bg-cgv-red hover:bg-red-700 text-white font-bold text-xs transition">
+          Hoàn tất & Về trang chủ
+        </button>
+        <button onclick="window.print()" class="px-4 py-3 rounded-xl bg-gray-800 text-gray-300 hover:text-white font-bold text-xs">
+          <i class="fa-solid fa-print"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== FLOATING 24/7 AI CHATBOT WIDGET ==================== -->
+  <div id="chatbot-container" class="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+    <div id="chatbot-window" class="hidden mb-3 w-[360px] sm:w-[400px] h-[520px] bg-cgv-dark/95 backdrop-blur border border-red-500/40 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div class="p-3.5 bg-gradient-to-r from-red-950 via-cgv-dark to-cgv-dark border-b border-gray-800 flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-lg bg-cgv-red flex items-center justify-center text-white text-sm shadow">
+            <i class="fa-solid fa-robot"></i>
+          </div>
+          <div>
+            <span class="block text-xs font-black text-white">Trợ Lý Ảo CGV Cinema</span>
+            <span class="block text-[10px] text-green-400 font-semibold"><i class="fa-solid fa-circle text-[8px] mr-1"></i>Hỗ trợ 24/7 (NLU Tiếng Việt)</span>
+          </div>
+        </div>
+        <button onclick="toggleChatbot()" class="text-gray-400 hover:text-white text-sm p-1">
+          <i class="fa-solid fa-chevron-down"></i>
+        </button>
+      </div>
+
+      <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start space-x-2">
+          <div class="w-6 h-6 rounded-full bg-cgv-red text-white flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5">
+            <i class="fa-solid fa-robot"></i>
+          </div>
+          <div class="p-3 rounded-2xl rounded-tl-none bg-gray-800 text-gray-200 max-w-[82%] leading-relaxed">
+            Xin chào! Em là Trợ lý AI của CGV Cinemas. Em có thể gợi ý phim bom tấn, tra cứu lịch chiếu cụm rạp và hỗ trợ anh/chị chọn ghế đặt vé. Anh/chị cần em hỗ trợ gì ạ?
+          </div>
+        </div>
+      </div>
+
+      <div class="p-2 border-t border-gray-800/80 bg-cgv-black/50 flex space-x-1.5 overflow-x-auto text-[11px] whitespace-nowrap">
+        <button onclick="sendQuickPrompt('Gợi ý phim hot')" class="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-red-300 border border-red-800/50">✨ Gợi ý phim hot</button>
+        <button onclick="sendQuickPrompt('Đặt 2 vé Dune 2 tối nay')" class="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-yellow-300 border border-yellow-800/50">🎟️ Đặt 2 vé Dune 2</button>
+        <button onclick="sendQuickPrompt('Giá vé học sinh sinh viên?')" class="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700">💰 Giá vé HSSV</button>
+      </div>
+
+      <form id="chat-form" onsubmit="handleChatSubmit(event)" class="p-2.5 bg-cgv-card border-t border-gray-800 flex items-center space-x-2">
+        <input type="text" id="chat-input" placeholder="Hỏi CGV AI bất kỳ điều gì..." class="flex-1 px-3.5 py-2 rounded-xl bg-gray-900 border border-gray-700 text-xs text-white focus:outline-none focus:border-red-500">
+        <button type="submit" class="w-9 h-9 rounded-xl bg-cgv-red hover:bg-red-600 text-white flex items-center justify-center transition flex-shrink-0">
+          <i class="fa-solid fa-paper-plane text-xs"></i>
+        </button>
+      </form>
+    </div>
+
+    <button onclick="toggleChatbot()" class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cgv-red to-orange-600 text-white text-2xl shadow-xl flex items-center justify-center transition hover:scale-105 cgv-glow">
+      <i class="fa-solid fa-comment-dots"></i>
+    </button>
+  </div>
+
+  <!-- ==================== FOOTER ==================== -->
+  <footer class="bg-cgv-black border-t border-gray-900 py-10 text-xs text-gray-500">
+    <div class="max-w-7xl mx-auto px-4 space-y-3 text-center">
+      <div class="flex items-center justify-center space-x-3 text-white font-black text-xl">
+        <span class="text-cgv-red">CGV</span>
+        <span>CINEMAS VIETNAM</span>
+      </div>
+      <p class="font-semibold text-gray-400">CÔNG TY TNHH CJ CGV VIETNAM • HỆ THỐNG RẠP CHIẾU PHIM VĂN HÓA ĐA NĂNG</p>
+      <p>© 2026 CJ CGV. All rights reserved. Trải nghiệm điện ảnh chuẩn quốc tế với phòng chiếu IMAX, 4DX, ScreenX, Gold Class.</p>
+      <!-- Link ẩn vào Admin Portal - chỉ dành cho staff nội bộ -->
+      <p class="mt-4">
+        <button onclick="openAdminLoginPortal()" class="text-gray-800 hover:text-gray-600 transition text-[10px] font-normal">
+          v2.6.0 • CGV CMS
+        </button>
+      </p>
+    </div>
+  </footer>
+
+  <!-- ==================== ADMIN LOGIN PORTAL (RIÊNG BIỆT CHO NHÂN VIÊN NỘI BỘ) ==================== -->
+  <div id="admin-login-portal" class="fixed inset-0 z-[200] hidden">
+    <!-- Dark overlay -->
+    <div class="absolute inset-0 bg-black/95 backdrop-blur-xl" onclick="closeAdminLoginPortal()"></div>
+    
+    <!-- Portal Container -->
+    <div class="relative z-10 min-h-screen flex items-center justify-center p-4">
+      <div class="w-full max-w-md">
+        
+        <!-- Top Security Badge -->
+        <div class="text-center mb-6">
+          <div class="inline-flex items-center space-x-2 px-4 py-1.5 rounded-full bg-red-950/60 border border-red-800/60 text-red-400 text-[11px] font-black uppercase tracking-widest mb-4">
+            <i class="fa-solid fa-shield-halved"></i>
+            <span>Khu Vực Hạn Chế — Staff Only</span>
+          </div>
+        </div>
+
+        <!-- Login Card -->
+        <div class="bg-gradient-to-b from-gray-900 to-cgv-dark border border-red-900/40 rounded-3xl shadow-2xl shadow-red-900/20 overflow-hidden">
+          
+          <!-- Header -->
+          <div class="bg-gradient-to-r from-cgv-darkred via-cgv-red to-cgv-darkred p-6 text-center relative">
+            <div class="absolute inset-0 bg-black/30"></div>
+            <div class="relative z-10">
+              <div class="w-16 h-16 mx-auto rounded-2xl bg-white/10 backdrop-blur border border-white/20 flex items-center justify-center text-white mb-3">
+                <i class="fa-solid fa-shield-halved text-3xl"></i>
+              </div>
+              <h2 class="text-2xl font-black text-white tracking-wider">CGV ADMIN PORTAL</h2>
+              <p class="text-red-200 text-xs mt-1 font-semibold">Hệ thống quản trị nội bộ — Chỉ dành cho nhân viên CGV</p>
+            </div>
+            <!-- Decorative glow lines -->
+            <div class="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-red-500/60 to-transparent"></div>
+          </div>
+          
+          <!-- Form Body -->
+          <div class="p-7">
+            <form id="admin-login-form" onsubmit="handleAdminLoginSubmit(event)" class="space-y-4">
+              
+              <div>
+                <label class="block text-xs font-bold text-gray-400 mb-1.5 uppercase tracking-wider">
+                  <i class="fa-solid fa-envelope mr-1.5 text-red-400"></i>Email Nội Bộ:
+                </label>
+                <input type="email" id="admin-login-email" required
+                  placeholder="yourname@aicinema.vn"
+                  class="w-full px-4 py-3 rounded-xl bg-black/60 border border-gray-700 text-white placeholder-gray-600 focus:outline-none focus:border-cgv-red text-sm transition"
+                  value="">
+              </div>
+              
+              <div>
+                <label class="block text-xs font-bold text-gray-400 mb-1.5 uppercase tracking-wider">
+                  <i class="fa-solid fa-lock mr-1.5 text-red-400"></i>Mật Khẩu Quản Trị:
+                </label>
+                <div class="relative">
+                  <input type="password" id="admin-login-password" required
+                    placeholder="••••••••"
+                    class="w-full px-4 py-3 rounded-xl bg-black/60 border border-gray-700 text-white placeholder-gray-600 focus:outline-none focus:border-cgv-red text-sm transition pr-12">
+                  <button type="button" onclick="toggleAdminPasswordVisibility()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition">
+                    <i id="admin-pw-eye" class="fa-solid fa-eye text-sm"></i>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Error Message -->
+              <div id="admin-login-error" class="hidden p-3 rounded-xl bg-red-950/60 border border-red-800/60 text-red-400 text-xs flex items-center space-x-2">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+                <span id="admin-login-error-msg">Tài khoản hoặc mật khẩu không đúng.</span>
+              </div>
+              
+              <button type="submit" id="admin-login-btn" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-cgv-red to-red-700 hover:from-red-600 hover:to-red-800 text-white font-black text-sm tracking-wider shadow-lg shadow-red-600/30 transition flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-right-to-bracket"></i>
+                <span>ĐĂNG NHẬP HỆ THỐNG</span>
+              </button>
+            </form>
+            
+            <!-- Quick Access Staff Accounts -->
+            <div class="mt-6 pt-5 border-t border-gray-800">
+              <p class="text-[10px] uppercase tracking-widest text-gray-600 font-bold text-center mb-3">
+                <i class="fa-solid fa-bolt text-cgv-gold mr-1"></i>Đăng Nhập Nhanh (Demo)
+              </p>
+              <div class="grid grid-cols-3 gap-2">
+                <button onclick="quickAdminLogin('admin@aicinema.vn','admin123')" type="button"
+                  class="p-2.5 rounded-xl bg-red-950/30 hover:bg-red-950/60 border border-red-900/40 hover:border-red-700 transition text-center group">
+                  <i class="fa-solid fa-shield text-red-400 text-lg block mb-1"></i>
+                  <span class="text-[10px] font-black text-red-400 group-hover:text-red-300 block">ADMIN</span>
+                  <span class="text-[9px] text-gray-600 block">Nguyễn Q. Huy</span>
+                </button>
+                <button onclick="quickAdminLogin('huy@aicinema.vn','123456')" type="button"
+                  class="p-2.5 rounded-xl bg-blue-950/30 hover:bg-blue-950/60 border border-blue-900/40 hover:border-blue-700 transition text-center group">
+                  <i class="fa-solid fa-user-tie text-blue-400 text-lg block mb-1"></i>
+                  <span class="text-[10px] font-black text-blue-400 group-hover:text-blue-300 block">MANAGER</span>
+                  <span class="text-[9px] text-gray-600 block">Quản lý rạp</span>
+                </button>
+                <button onclick="quickAdminLogin('minhanh@aicinema.vn','123456')" type="button"
+                  class="p-2.5 rounded-xl bg-green-950/30 hover:bg-green-950/60 border border-green-900/40 hover:border-green-700 transition text-center group">
+                  <i class="fa-solid fa-cash-register text-green-400 text-lg block mb-1"></i>
+                  <span class="text-[10px] font-black text-green-400 group-hover:text-green-300 block">STAFF</span>
+                  <span class="text-[9px] text-gray-600 block">Nhân viên</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Back to customer site -->
+            <button onclick="closeAdminLoginPortal()" type="button"
+              class="w-full mt-4 py-2 rounded-xl text-gray-600 hover:text-gray-400 text-xs transition flex items-center justify-center space-x-1">
+              <i class="fa-solid fa-arrow-left text-xs"></i>
+              <span>Quay lại trang khách hàng</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Security Notice -->
+        <div class="mt-4 text-center">
+          <p class="text-[10px] text-gray-700">
+            <i class="fa-solid fa-lock mr-1"></i>
+            Kết nối được mã hóa TLS 1.3 • CGV Internal Network • Mọi hoạt động được ghi nhật ký
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Frontend Logic Script -->
+  <script src="/src/app.js"></script>
+</body>
+</html>

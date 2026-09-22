@@ -1,0 +1,13 @@
+{
+  "name": "cinema-management-ai-backend",
+  "version": "1.0.0",
+  "description": "Backend API cho Hệ thống Quản lý Rạp chiếu phim tích hợp Trí tuệ Nhân tạo (AI)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
