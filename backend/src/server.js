@@ -13,9 +13,9 @@ const PORT = process.env.PORT || 5000;
 // Hệ thống phân quyền RBAC (Role-Based Access Control)
 const ROLE_PERMISSIONS = {
   CUSTOMER: ["movies.read", "bookings.create", "recommendations.read", "profile.manage"],
-  STAFF: ["movies.read", "bookings.create", "bookings.scan", "support.manage"],
-  MANAGER: ["movies.read", "movies.manage", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage"],
-  ADMIN: ["movies.read", "movies.manage", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage", "users.manage", "system.manage"]
+  STAFF: ["movies.read", "bookings.create", "bookings.read", "bookings.scan", "support.manage"],
+  MANAGER: ["movies.read", "movies.manage", "bookings.read", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage"],
+  ADMIN: ["movies.read", "movies.manage", "bookings.read", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage", "users.manage", "system.manage"]
 };
 
 /**
@@ -316,6 +316,56 @@ app.get("/api/v1/users/:id/bookings", (req, res) => {
   });
 });
 
+// Lịch sử tất cả vé đã đặt dành cho Admin, Quản lý và Nhân viên POS
+app.get("/api/v1/admin/bookings", requirePermission("bookings.read"), (req, res) => {
+  const { page = 1, limit = 10, search = "", status = "ALL", date = "" } = req.query;
+  const normalizedSearch = String(search).trim().toLowerCase();
+  const dateKey = String(date).trim();
+
+  const detailedBookings = bookings.map(booking => {
+    const user = users.find(item => item.id === booking.userId);
+    const movie = movies.find(item => item.id === booking.movieId);
+    const showtime = showtimes.find(item => item.id === booking.showtimeId);
+    const room = showtime ? rooms.find(item => item.id === showtime.roomId) : null;
+    const cinema = room ? cinemas.find(item => item.id === room.cinemaId) : null;
+    return {
+      ...booking,
+      customer: user ? { id: user.id, name: user.name, email: user.email, phone: user.phone } : null,
+      movie: movie ? { id: movie.id, title: movie.title } : null,
+      showtime: showtime ? { id: showtime.id, startTime: showtime.startTime, price: showtime.price } : null,
+      room: room ? { id: room.id, name: room.name } : null,
+      cinema: cinema ? { id: cinema.id, name: cinema.name } : null
+    };
+  }).filter(booking => {
+    const searchable = [
+      booking.bookingCode,
+      booking.userId,
+      booking.customer?.name,
+      booking.customer?.email,
+      booking.movie?.title
+    ].filter(Boolean).join(" ").toLowerCase();
+    const matchesStatus = status === "ALL" || booking.status === status;
+    const matchesDate = !dateKey || booking.bookedAt?.slice(0, 10) === dateKey;
+    return matchesStatus && matchesDate && (!normalizedSearch || searchable.includes(normalizedSearch));
+  });
+
+  const p = Math.max(1, parseInt(page) || 1);
+  const l = Math.max(1, parseInt(limit) || 10);
+  const total = detailedBookings.length;
+  const totalPages = Math.ceil(total / l) || 1;
+  const paginated = detailedBookings.slice((p - 1) * l, p * l);
+
+  res.json({
+    status: "SUCCESS",
+    data: paginated,
+    pagination: { total, page: p, limit: l, totalPages },
+    summary: {
+      totalTickets: detailedBookings.reduce((sum, booking) => sum + (booking.seats?.length || 0), 0),
+      totalRevenue: detailedBookings.reduce((sum, booking) => sum + Number(booking.total || 0), 0)
+    }
+  });
+});
+
 // 12. Thanh toán & Phát hành vé điện tử CGV (Tích lũy chi tiêu & thăng hạng CGV VIP)
 app.post("/api/v1/payments/checkout", (req, res) => {
   const { showtimeId, seatIds, userId, comboIds, customerInfo } = req.body;
@@ -327,6 +377,17 @@ app.post("/api/v1/payments/checkout", (req, res) => {
   const showtime = showtimes.find(st => st.id === showtimeId);
   if (!showtime) {
     return res.status(404).json({ status: "ERROR", message: "Không tìm thấy suất chiếu" });
+  }
+
+  const seatDetails = seatIds.map(seatId => defaultSeats.find(seat => seat.id === seatId));
+  if (seatDetails.some(seat => !seat)) {
+    return res.status(400).json({ status: "ERROR", message: "Danh sách ghế không hợp lệ" });
+  }
+
+  const selectedComboIds = Array.isArray(comboIds) ? comboIds : [];
+  const comboDetails = selectedComboIds.map(comboId => combos.find(combo => combo.id === comboId));
+  if (comboDetails.some(combo => !combo)) {
+    return res.status(400).json({ status: "ERROR", message: "Combo không hợp lệ" });
   }
 
   const bookingConfirmation = seatLockService.confirmBooking(showtimeId, seatIds, userId);
@@ -341,7 +402,12 @@ app.post("/api/v1/payments/checkout", (req, res) => {
   const bookingCode = `CGV-${Date.now().toString().slice(-6)}`;
   const qrToken = `CGV-TICKET-${bookingCode}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
 
-  const ticketTotal = seatIds.length * showtime.price;
+  const ticketTotal = seatDetails.reduce(
+    (total, seat) => total + Math.round(showtime.price * seat.priceRate),
+    0
+  );
+  const comboTotal = comboDetails.reduce((total, combo) => total + combo.price, 0);
+  const grandTotal = ticketTotal + comboTotal;
 
   const newBooking = {
     bookingCode,
@@ -349,7 +415,10 @@ app.post("/api/v1/payments/checkout", (req, res) => {
     movieId: showtime.movieId,
     showtimeId: showtime.id,
     seats: seatIds,
-    total: ticketTotal,
+    ticketTotal,
+    comboTotal,
+    total: grandTotal,
+    comboIds: selectedComboIds,
     status: "PAID",
     bookedAt: new Date().toISOString()
   };
@@ -359,9 +428,9 @@ app.post("/api/v1/payments/checkout", (req, res) => {
   const user = users.find(u => u.id === userId);
   let rankUpgradeNotice = "";
   if (user) {
-    const earnedPoints = Math.round(ticketTotal / 1000);
+    const earnedPoints = Math.round(grandTotal / 1000);
     user.points = (user.points || 0) + earnedPoints;
-    user.totalSpent = (user.totalSpent || 0) + ticketTotal;
+    user.totalSpent = (user.totalSpent || 0) + grandTotal;
 
     // Quy tắc thăng hạng CGV:
     if (user.totalSpent >= 5000000 && user.memberTier !== "VVIP") {
@@ -383,7 +452,10 @@ app.post("/api/v1/payments/checkout", (req, res) => {
     cinemaName: cinema ? cinema.name : "CGV Cinema",
     roomName: room ? room.name : "Phòng chiếu",
     seats: seatIds,
-    total: ticketTotal,
+    ticketTotal,
+    comboTotal,
+    total: grandTotal,
+    comboItems: comboDetails.map(combo => ({ id: combo.id, name: combo.name, price: combo.price })),
     customerName: customerInfo ? customerInfo.name : (user ? user.name : "Khách hàng"),
     customerPhone: customerInfo ? customerInfo.phone : (user ? user.phone : ""),
     paymentStatus: "SUCCESS",

@@ -53,6 +53,13 @@ let userSearch = "";
 let userRole = "ALL";
 let userSearchTimeout = null;
 
+let bookingPage = 1;
+const bookingLimit = 10;
+let bookingSearch = "";
+let bookingStatus = "ALL";
+let bookingDate = "";
+let bookingSearchTimeout = null;
+
 let deleteConfirmCallback = null;
 
 // ==================== INITIALIZATION ==================== //
@@ -242,7 +249,7 @@ async function handleLoginSubmit(event) {
       closeAuthModal();
       updateAuthUI();
       showToast(json.message || "Đăng nhập thành công!", "success");
-      if (["ADMIN", "MANAGER"].includes(currentUser.role)) {
+      if (["ADMIN", "MANAGER", "STAFF"].includes(currentUser.role)) {
         showToast(`Chào mừng Quản trị viên ${currentUser.name}. Bạn có thể vào tab Quản Trị Admin.`, "info");
       }
     } else {
@@ -351,7 +358,7 @@ function handleAdminNavClick() {
     return;
   }
 
-  if (["ADMIN", "MANAGER"].includes(currentUser.role)) {
+  if (["ADMIN", "MANAGER", "STAFF"].includes(currentUser.role)) {
     switchView("admin");
   } else {
     showToast(`Tài khoản ${currentUser.name} là Khách hàng, không có quyền truy cập khu vực Quản trị Admin! Vui lòng đăng nhập bằng tài khoản Quản trị viên.`, "error");
@@ -368,7 +375,7 @@ function switchView(viewName) {
   const accountView = document.getElementById("account-view");
 
   if (viewName === "admin") {
-    if (!currentUser || !["ADMIN", "MANAGER"].includes(currentUser.role)) {
+    if (!currentUser || !["ADMIN", "MANAGER", "STAFF"].includes(currentUser.role)) {
       handleAdminNavClick();
       return;
     }
@@ -860,7 +867,7 @@ function switchAdminTab(tabName) {
     return;
   }
   currentAdminTab = tabName;
-  const tabs = ["movies", "showtimes", "users", "forecast"];
+  const tabs = ["movies", "showtimes", "users", "bookings", "forecast"];
   tabs.forEach(t => {
     const pane = document.getElementById(`admin-tab-${t}`);
     const btn = document.getElementById(`btn-admin-tab-${t}`);
@@ -880,6 +887,7 @@ function switchAdminTab(tabName) {
   if (tabName === "movies") fetchAdminMovies();
   if (tabName === "showtimes") fetchAdminShowtimes();
   if (tabName === "users") fetchAdminUsers();
+  if (tabName === "bookings") fetchAdminBookings();
 }
 
 async function loadAdminDashboard() {
@@ -1465,6 +1473,128 @@ function goToUserPage(page) {
   fetchAdminUsers();
 }
 
+// ---------------- 4. LỊCH SỬ VÉ ĐÃ ĐẶT CHO VẬN HÀNH RẠP ---------------- //
+
+async function fetchAdminBookings() {
+  const tbody = document.getElementById("admin-bookings-table-body");
+  if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-gray-400"><i class="fa-solid fa-spinner animate-spin mr-2 text-cgv-red"></i>Đang tải lịch sử vé...</td></tr>`;
+
+  try {
+    const query = new URLSearchParams({
+      page: bookingPage,
+      limit: bookingLimit,
+      search: bookingSearch,
+      status: bookingStatus,
+      date: bookingDate
+    });
+    const res = await apiFetch(`/admin/bookings?${query.toString()}`);
+    const json = await res.json();
+
+    if (json.status === "SUCCESS") {
+      renderAdminBookingsTable(json.data, json.pagination, json.summary);
+    } else if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-red-400">${json.message || "Không thể tải lịch sử vé."}</td></tr>`;
+    }
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-red-400">Không thể kết nối máy chủ.</td></tr>`;
+  }
+}
+
+function renderAdminBookingsTable(bookingsList, pagination, summary) {
+  const tbody = document.getElementById("admin-bookings-table-body");
+  const infoEl = document.getElementById("admin-bookings-pagination-info");
+  const controlsEl = document.getElementById("admin-bookings-pagination-controls");
+  const ticketsEl = document.getElementById("admin-booking-total-tickets");
+  const revenueEl = document.getElementById("admin-booking-total-revenue");
+
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  if (ticketsEl) ticketsEl.textContent = Number(summary?.totalTickets || 0).toLocaleString("vi-VN");
+  if (revenueEl) revenueEl.textContent = `${Number(summary?.totalRevenue || 0).toLocaleString("vi-VN")} đ`;
+
+  if (!bookingsList || bookingsList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-gray-400">Chưa có vé nào phù hợp.</td></tr>`;
+    if (infoEl) infoEl.textContent = "0 vé";
+    if (controlsEl) controlsEl.innerHTML = "";
+    return;
+  }
+
+  bookingsList.forEach(booking => {
+    const tr = document.createElement("tr");
+    tr.className = "border-t border-gray-800 hover:bg-gray-800/40 transition";
+    const bookedAt = booking.bookedAt ? new Date(booking.bookedAt).toLocaleString("vi-VN") : "-";
+    const customer = booking.customer || {};
+    const movie = booking.movie || {};
+    const showtime = booking.showtime || {};
+    const statusClass = booking.status === "PAID"
+      ? "bg-green-950 text-green-400 border-green-800"
+      : "bg-red-950 text-red-400 border-red-800";
+    tr.innerHTML = `
+      <td class="p-4">
+        <b class="text-cgv-red font-mono text-xs block">${booking.bookingCode}</b>
+        <span class="text-[10px] text-gray-500">${bookedAt}</span>
+      </td>
+      <td class="p-4">
+        <b class="text-white text-xs block">${customer.name || booking.userId}</b>
+        <span class="text-[10px] text-gray-500">${customer.email || "-"}</span>
+      </td>
+      <td class="p-4">
+        <b class="text-white text-xs block">${movie.title || booking.movieId}</b>
+        <span class="text-[10px] text-gray-400">${showtime.startTime || "-"}</span>
+      </td>
+      <td class="p-4 text-gray-300">
+        <span class="block text-white">${booking.room?.name || "-"}</span>
+        <span class="text-[10px] text-cgv-gold">${(booking.seats || []).join(", ")}</span>
+      </td>
+      <td class="p-4 text-cgv-gold font-bold">${Number(booking.total || 0).toLocaleString("vi-VN")} đ</td>
+      <td class="p-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold border ${statusClass}">${booking.status}</span></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const { total, page, totalPages } = pagination;
+  if (infoEl) infoEl.textContent = `Trang ${page} / ${totalPages} (Tổng ${total} vé)`;
+  if (controlsEl) {
+    controlsEl.innerHTML = `
+      <button onclick="goToBookingPage(${page - 1})" ${page <= 1 ? "disabled" : ""} class="px-2.5 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+        <i class="fa-solid fa-chevron-left"></i>
+      </button>
+      ${Array.from({ length: totalPages }, (_, i) => i + 1).map(p => `
+        <button onclick="goToBookingPage(${p})" class="w-8 h-8 rounded-lg text-xs font-bold transition ${p === page ? 'bg-cgv-red text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}">${p}</button>
+      `).join("")}
+      <button onclick="goToBookingPage(${page + 1})" ${page >= totalPages ? "disabled" : ""} class="px-2.5 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+        <i class="fa-solid fa-chevron-right"></i>
+      </button>
+    `;
+  }
+}
+
+function handleBookingSearch(value) {
+  clearTimeout(bookingSearchTimeout);
+  bookingSearchTimeout = setTimeout(() => {
+    bookingSearch = value.trim();
+    bookingPage = 1;
+    fetchAdminBookings();
+  }, 350);
+}
+
+function handleBookingStatusFilter(value) {
+  bookingStatus = value;
+  bookingPage = 1;
+  fetchAdminBookings();
+}
+
+function handleBookingDateFilter(value) {
+  bookingDate = value;
+  bookingPage = 1;
+  fetchAdminBookings();
+}
+
+function goToBookingPage(page) {
+  bookingPage = page;
+  fetchAdminBookings();
+}
+
 function openUserModal(mode = "create", userData = null) {
   const modal = document.getElementById("user-modal");
   const title = document.getElementById("user-modal-title");
@@ -1890,6 +2020,9 @@ async function handleCheckout() {
 
   const userId = currentUser ? currentUser.id : "user_guest";
   const customerInfo = currentUser ? { name: currentUser.name, phone: currentUser.phone } : { name: "Khách hàng CGV", phone: "0987654321" };
+  const comboIds = Object.entries(selectedCombos).flatMap(([comboId, combo]) =>
+    Array.from({ length: combo.qty }, () => comboId)
+  );
 
   try {
     const res = await fetch(`${API_BASE}/payments/checkout`, {
@@ -1899,7 +2032,7 @@ async function handleCheckout() {
         showtimeId: selectedShowtime,
         seatIds: selectedSeats,
         userId: userId,
-        comboIds: Object.keys(selectedCombos).filter(k => selectedCombos[k].qty > 0),
+        comboIds,
         customerInfo: customerInfo
       })
     });
@@ -2337,7 +2470,7 @@ async function handleAdminLoginSubmit(event) {
     if (json.status === "SUCCESS") {
       const user = json.user;
       // Kiểm tra quyền truy cập admin
-      if (!["ADMIN", "MANAGER"].includes(user.role)) {
+      if (!["ADMIN", "MANAGER", "STAFF"].includes(user.role)) {
         if (errDiv) errDiv.classList.remove("hidden");
         if (errMsg) errMsg.textContent = "Tài khoản này không có quyền truy cập hệ thống quản trị. Vui lòng dùng tài khoản nội bộ CGV.";
         if (btn) {
@@ -2426,7 +2559,7 @@ function toggleAdminPasswordVisibility() {
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey && e.shiftKey && e.key === "A") {
     e.preventDefault();
-    if (currentUser && ["ADMIN", "MANAGER"].includes(currentUser.role)) {
+    if (currentUser && ["ADMIN", "MANAGER", "STAFF"].includes(currentUser.role)) {
       switchView("admin");
     } else {
       openAdminLoginPortal();

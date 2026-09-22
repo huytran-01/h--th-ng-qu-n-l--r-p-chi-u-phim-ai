@@ -440,6 +440,9 @@
           <button onclick="switchAdminTab('users')" id="btn-admin-tab-users" class="admin-tab px-4 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-xs font-bold transition flex items-center hover:text-white">
             <i class="fa-solid fa-users-gear mr-2"></i>Người Dùng & Phân Quyền (RBAC)
           </button>
+          <button onclick="switchAdminTab('bookings')" id="btn-admin-tab-bookings" class="admin-tab px-4 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-xs font-bold transition flex items-center hover:text-white">
+            <i class="fa-solid fa-ticket mr-2"></i>Lịch Sử Vé Đã Đặt
+          </button>
           <button onclick="switchAdminTab('forecast')" id="btn-admin-tab-forecast" class="admin-tab px-4 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-xs font-bold transition flex items-center hover:text-white">
             <i class="fa-solid fa-chart-pie mr-2"></i>Dự Báo Nhu Cầu & Lịch AI
           </button>
@@ -581,6 +584,50 @@
           <div class="p-4 bg-gray-900/60 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
             <span id="admin-users-pagination-info" class="text-gray-400">Đang tải...</span>
             <div id="admin-users-pagination-controls" class="flex items-center space-x-1.5"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADMIN TAB 4: BOOKING HISTORY FOR OPERATIONS -->
+      <div id="admin-tab-bookings" class="hidden space-y-4">
+        <div class="p-4 rounded-2xl bg-cgv-card border border-gray-800 flex flex-col xl:flex-row items-center justify-between gap-4">
+          <div class="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-1">
+            <div class="relative w-full sm:max-w-sm">
+              <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+              <input type="text" id="admin-booking-search" oninput="handleBookingSearch(this.value)" placeholder="Tìm mã vé, khách hàng, phim..." class="field pl-9">
+            </div>
+            <select id="admin-booking-status" onchange="handleBookingStatusFilter(this.value)" class="w-full sm:w-auto bg-gray-900 border border-gray-700 text-xs rounded-xl px-3 py-2 text-gray-300 focus:outline-none">
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="PAID">Đã thanh toán</option>
+              <option value="CANCELLED">Đã hủy</option>
+            </select>
+            <input type="date" id="admin-booking-date" onchange="handleBookingDateFilter(this.value)" class="w-full sm:w-auto bg-gray-900 border border-gray-700 text-xs rounded-xl px-3 py-2 text-gray-300 focus:outline-none" title="Lọc theo ngày đặt vé">
+          </div>
+          <div class="flex items-center gap-5 text-xs whitespace-nowrap">
+            <span class="text-gray-400">Vé: <b id="admin-booking-total-tickets" class="text-white">0</b></span>
+            <span class="text-gray-400">Doanh thu: <b id="admin-booking-total-revenue" class="text-cgv-gold">0 đ</b></span>
+          </div>
+        </div>
+
+        <div class="rounded-2xl bg-cgv-card border border-gray-800 overflow-hidden shadow-xl">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-gray-900/80 text-gray-400 uppercase tracking-wider text-[11px] border-b border-gray-800">
+                <tr>
+                  <th class="p-4">Mã vé / Thời gian</th>
+                  <th class="p-4">Khách hàng</th>
+                  <th class="p-4">Phim / Suất chiếu</th>
+                  <th class="p-4">Phòng / Ghế</th>
+                  <th class="p-4">Tổng tiền</th>
+                  <th class="p-4">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody id="admin-bookings-table-body" class="divide-y divide-gray-800"></tbody>
+            </table>
+          </div>
+          <div class="p-4 bg-gray-900/60 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <span id="admin-bookings-pagination-info" class="text-gray-400">Đang tải...</span>
+            <div id="admin-bookings-pagination-controls" class="flex items-center space-x-1.5"></div>
           </div>
         </div>
       </div>

@@ -3,7 +3,7 @@
  * Chức năng: Báo cáo KPI ngày, phân tích doanh thu, dự báo giờ cao điểm,
  *            đề xuất lịch chiếu tối ưu theo thuật toán LightGBM (mô phỏng)
  */
-const { movies, showtimes, rooms } = require("../data/mockData");
+const { movies, showtimes, rooms, bookings } = require("../data/mockData");
 
 // Dữ liệu lịch sử bán vé mô phỏng (trong thực tế lấy từ DB)
 const MOCK_SALES_HISTORY = {
@@ -52,9 +52,17 @@ class AdminAnalyticsAgent {
     const dayOfWeek = reportDate.getDay();
     const dayMultiplier = DAY_MULTIPLIERS[dayOfWeek];
 
-    // Tính KPI ngày dựa trên dữ liệu lịch sử và hệ số ngày
-    const dailyTickets = Math.round((MOCK_SALES_HISTORY.totalTicketsSold / 30) * dayMultiplier);
-    const dailyRevenue = Math.round((MOCK_SALES_HISTORY.totalRevenue / 30) * dayMultiplier);
+    // Ưu tiên doanh thu thực tế từ các booking đã thanh toán trong ngày.
+    const reportDateKey = reportDate.toISOString().slice(0, 10);
+    const paidBookings = bookings.filter(booking =>
+      booking.status === "PAID" && booking.bookedAt?.slice(0, 10) === reportDateKey
+    );
+    const dailyTickets = paidBookings.length > 0
+      ? paidBookings.reduce((total, booking) => total + booking.seats.length, 0)
+      : Math.round((MOCK_SALES_HISTORY.totalTicketsSold / 30) * dayMultiplier);
+    const dailyRevenue = paidBookings.length > 0
+      ? paidBookings.reduce((total, booking) => total + Number(booking.total || 0), 0)
+      : Math.round((MOCK_SALES_HISTORY.totalRevenue / 30) * dayMultiplier);
     const occupancyRate = Math.min(0.99, MOCK_SALES_HISTORY.avgOccupancyRate * dayMultiplier);
 
     // Tìm phim bán chạy nhất trong ngày
