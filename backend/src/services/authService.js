@@ -1,5 +1,6 @@
 // Dịch vụ Xác thực & Quản lý Phiên Người Dùng Chuẩn CGV Membership
 const { users } = require("../data/mockData");
+const dbService = require("./dbService");
 
 // In-memory token store (Token -> { userId, role, createdAt, expiresAt })
 const tokenStore = new Map();
@@ -106,6 +107,7 @@ class AuthService {
     };
 
     users.push(newUser);
+    dbService.createUser(newUser).catch(e => console.warn("Lỗi lưu user mới vào MySQL:", e.message));
 
     // Tự động sinh token đăng nhập
     const token = this.generateToken(newId);

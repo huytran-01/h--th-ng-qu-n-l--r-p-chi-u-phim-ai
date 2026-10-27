@@ -546,6 +546,18 @@ erDiagram
     }
 ```
 
+### 3.1.1. Hiện thực Hệ Quản trị CSDL MySQL Server 8.0 & Script Migration
+
+Hệ thống đã được thiết kế và hiện thực hóa đầy đủ trên **Hệ Quản trị Cơ sở Dữ liệu Quan hệ MySQL Server 8.0+** nhằm đảm bảo tính bền vững (Data Persistence), toàn vẹn dữ liệu (ACID) và hiệu năng truy vấn cao:
+
+* **Tên cơ sở dữ liệu:** `cinema_db`
+* **Bộ mã ký tự:** `utf8mb4` (Hỗ trợ 100% tiếng Việt có dấu, ký hiệu đặc biệt và emoji).
+* **Storage Engine:** `InnoDB` (Hỗ trợ khóa ngoại Foreign Key, giao dịch Transaction và Row-level locking).
+* **Connection Pool:** Thư viện chuẩn `mysql2/promise` với cấu hình Connection Pool (tối đa 10 kết nối song song, tự động tái sử dụng connection).
+* **Tệp mã nguồn DDL:** [`backend/database/schema.sql`](file:///c:/Users/Admin/OneDrive/Tài liệu/Hệ-Thống-Quản-Lý-Rạp-Chiếu-Phim/backend/database/schema.sql) định nghĩa 8 bảng dữ liệu chuẩn.
+* **Tự động hóa Migration:** Tệp [`backend/database/initDb.js`](file:///c:/Users/Admin/OneDrive/Tài liệu/Hệ-Thống-Quản-Lý-Rạp-Chiếu-Phim/backend/database/initDb.js) cho phép khởi tạo CSDL và nạp dữ liệu mẫu chỉ với một dòng lệnh: `npm run db:init`.
+* **Cơ chế Dual-Mode thông minh:** Tầng Data Access Layer [`backend/src/services/dbService.js`](file:///c:/Users/Admin/OneDrive/Tài liệu/Hệ-Thống-Quản-Lý-Rạp-Chiếu-Phim/backend/src/services/dbService.js) tự động phát hiện kết nối MySQL; nếu MySQL chưa được kích hoạt, hệ thống tự động chạy chế độ In-memory dự phòng để đảm bảo website không bao giờ bị gián đoạn.
+
 ---
 
 ## 3.2. Mô Hình Lớp Tổng Thể (Class Diagram)

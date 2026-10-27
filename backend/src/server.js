@@ -7,6 +7,8 @@ const { movies, showtimes, defaultSeats, combos, cinemas, rooms, users, bookings
 const seatLockService = require("./services/seatLockService");
 const aiService = require("./services/aiService");
 const authService = require("./services/authService");
+const database = require("./config/database");
+const dbService = require("./services/dbService");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -404,6 +406,7 @@ app.post("/api/v1/bookings/check-in", requirePermission("bookings.scan"), (req, 
   booking.status = "CHECKED_IN";
   booking.checkedInAt = new Date().toISOString();
   booking.checkedInBy = req.user ? req.user.name : "Nhân viên rạp";
+  dbService.updateBookingCheckIn(booking.bookingCode, booking.checkedInBy).catch(e => console.warn("Lỗi check-in MySQL:", e.message));
 
   const movie = movies.find(m => m.id === booking.movieId);
   const showtime = showtimes.find(st => st.id === booking.showtimeId);
@@ -481,6 +484,7 @@ app.post("/api/v1/payments/checkout", (req, res) => {
     bookedAt: new Date().toISOString()
   };
   bookings.unshift(newBooking);
+  dbService.createBooking(newBooking).catch(e => console.warn("Lỗi lưu đơn đặt vé MySQL:", e.message));
 
   // Tích điểm và thăng hạng CGV Membership
   const user = users.find(u => u.id === userId);
@@ -500,6 +504,9 @@ app.post("/api/v1/payments/checkout", (req, res) => {
       user.membership = "GOLD";
       rankUpgradeNotice = " 🎉 Chúc mừng bạn đã được nâng hạng thành viên CGV VIP!";
     }
+
+    dbService.updateUser(user.id, { points: user.points, totalSpent: user.totalSpent, memberTier: user.memberTier })
+      .catch(e => console.warn("Lỗi cập nhật user MySQL:", e.message));
   }
 
   const bookingResult = {
@@ -719,6 +726,7 @@ app.post("/api/v1/admin/movies", requirePermission("movies.manage"), (req, res) 
   };
 
   movies.unshift(newMovie);
+  dbService.createMovie(newMovie).catch(e => console.warn("Lỗi lưu phim MySQL:", e.message));
   res.status(201).json({ status: "SUCCESS", data: newMovie, message: `Thêm phim "${newMovie.title}" thành công!` });
 });
 
@@ -744,6 +752,7 @@ app.put("/api/v1/admin/movies/:id", requirePermission("movies.manage"), (req, re
   if (isHot !== undefined) movie.isHot = Boolean(isHot);
   if (trendingScore !== undefined) movie.trendingScore = Number(trendingScore);
 
+  dbService.updateMovie(movie.id, movie).catch(e => console.warn("Lỗi cập nhật phim MySQL:", e.message));
   res.json({ status: "SUCCESS", data: movie, message: `Đã cập nhật phim "${movie.title}"!` });
 });
 
@@ -765,6 +774,8 @@ app.delete("/api/v1/admin/movies/:id", requirePermission("movies.manage"), (req,
       showtimes.splice(i, 1);
     }
   }
+
+  dbService.deleteMovie(deletedMovie.id).catch(e => console.warn("Lỗi xóa phim MySQL:", e.message));
 
   res.json({
     status: "SUCCESS",
@@ -846,6 +857,7 @@ app.post("/api/v1/admin/showtimes", requirePermission("showtimes.manage"), (req,
   };
 
   showtimes.unshift(newShowtime);
+  dbService.createShowtime(newShowtime).catch(e => console.warn("Lỗi lưu suất chiếu MySQL:", e.message));
   res.status(201).json({ status: "SUCCESS", data: newShowtime, message: "Đã tạo suất chiếu mới thành công!" });
 });
 
@@ -874,6 +886,7 @@ app.delete("/api/v1/admin/showtimes/:id", requirePermission("showtimes.manage"),
   if (index === -1) return res.status(404).json({ status: "ERROR", message: "Không tìm thấy suất chiếu." });
 
   const deleted = showtimes.splice(index, 1)[0];
+  dbService.deleteShowtime(deleted.id).catch(e => console.warn("Lỗi xóa suất chiếu MySQL:", e.message));
   res.json({ status: "SUCCESS", message: `Đã xóa suất chiếu ${deleted.id}.` });
 });
 
@@ -945,6 +958,7 @@ app.post("/api/v1/admin/users", requirePermission("users.manage"), (req, res) =>
   };
 
   users.unshift(newUser);
+  dbService.createUser(newUser).catch(e => console.warn("Lỗi lưu user MySQL:", e.message));
   const { password: _, ...safeUser } = newUser;
   res.status(201).json({ status: "SUCCESS", data: safeUser, message: `Tạo tài khoản cho ${newUser.name} thành công!` });
 });
@@ -972,6 +986,7 @@ app.patch("/api/v1/admin/users/:id/role", requirePermission("users.manage"), (re
   const role = String(req.body.role || "").toUpperCase();
   if (!user || !ROLE_PERMISSIONS[role]) return res.status(400).json({ status: "ERROR", message: "Tài khoản hoặc vai trò không hợp lệ." });
   user.role = role;
+  dbService.updateUserRole(user.id, role).catch(e => console.warn("Lỗi cập nhật role user MySQL:", e.message));
   const { password: _, ...safeUser } = user;
   res.json({ status: "SUCCESS", data: safeUser, message: `Đã cập nhật quyền thành "${role}"` });
 });
@@ -985,6 +1000,7 @@ app.delete("/api/v1/admin/users/:id", requirePermission("users.manage"), (req, r
   if (index === -1) return res.status(404).json({ status: "ERROR", message: "Không tìm thấy tài khoản." });
 
   const deleted = users.splice(index, 1)[0];
+  dbService.deleteUser(deleted.id).catch(e => console.warn("Lỗi xóa user MySQL:", e.message));
   res.json({ status: "SUCCESS", message: `Đã xóa tài khoản "${deleted.name}".` });
 });
 
@@ -1022,11 +1038,12 @@ app.get("/api/v1/admin/ai-health", requirePermission("ai.manage"), (req, res) =>
 });
 
 // Khởi chạy server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`====================================================`);
   console.log(` 🎬 CGV Cultureplex Cinema Management — Port ${PORT}`);
   console.log(`    http://localhost:${PORT}`);
   console.log(` 🎟️ Thanh Đặt Vé Nhanh & Phân Trang Khách Hàng / Admin`);
   console.log(` 👑 Thẻ Thành Viên CGV Membership & Phân Quyền RBAC`);
   console.log(`====================================================`);
+  await database.testConnection();
 });

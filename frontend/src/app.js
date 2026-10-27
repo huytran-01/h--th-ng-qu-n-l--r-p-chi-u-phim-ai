@@ -409,6 +409,7 @@ document.addEventListener("click", (e) => {
 // ==================== VIEW ROUTING (3 PHÂN HỆ TRANG RIÊNG BIỆT) ==================== //
 
 function switchView(viewName) {
+  closeUserDropdown();
   const homeView = document.getElementById("home-view");
   const staffView = document.getElementById("staff-view");
   const adminView = document.getElementById("admin-view");
@@ -1708,22 +1709,24 @@ function goToBookingPage(page) {
 }
 
 async function confirmCheckInTicket(code) {
-  if (!confirm(`Xác nhận soát vé cho mã ${code}? Khách sẽ được check-in vào phòng chiếu.`)) return;
-  try {
-    const res = await apiFetch(`/bookings/check-in`, {
-      method: "POST",
-      body: JSON.stringify({ code })
-    });
-    const json = await res.json();
-    if (json.status === "SUCCESS") {
-      showToast(json.message, "success");
-      fetchAdminBookings();
-    } else {
-      showToast(json.message || "Không thể soát vé.", "error");
+  showConfirmDeleteModal(`Xác nhận soát vé cho mã ${code}? Khách sẽ được check-in vào phòng chiếu.`, async () => {
+    try {
+      const res = await apiFetch(`/bookings/check-in`, {
+        method: "POST",
+        body: JSON.stringify({ code })
+      });
+      const json = await res.json();
+      if (json.status === "SUCCESS") {
+        showToast(json.message, "success");
+        fetchAdminBookings();
+        fetchStaffBookings();
+      } else {
+        showToast(json.message || "Không thể soát vé.", "error");
+      }
+    } catch (err) {
+      showToast("Lỗi kết nối khi gửi yêu cầu soát vé.", "error");
     }
-  } catch (err) {
-    showToast("Lỗi kết nối khi gửi yêu cầu soát vé.", "error");
-  }
+  });
 }
 
 // ==================== PHÂN HỆ NGHIỆP VỤ NHÂN VIÊN RẠP (STAFF POS & SOÁT VÉ) ==================== //
@@ -2818,33 +2821,39 @@ function showToast(message, type = "info") {
   if (!container) return;
 
   const toast = document.createElement("div");
-  toast.className = `px-4 py-3 rounded-xl border text-xs font-semibold shadow-2xl flex items-center space-x-2.5 transition-all duration-300 transform translate-y-2 opacity-0 pointer-events-auto ${
-    type === "success" ? "bg-green-950/95 border-green-700 text-green-300" :
-    type === "error" ? "bg-red-950/95 border-red-700 text-red-300" :
-    type === "warning" ? "bg-yellow-950/95 border-yellow-700 text-yellow-300" :
-    "bg-gray-900/95 border-red-700 text-red-300"
+  toast.className = `px-4 py-3 rounded-2xl border text-xs font-semibold shadow-2xl flex items-center space-x-3 transition-all duration-300 transform translate-y-4 opacity-0 pointer-events-auto backdrop-blur-md ${
+    type === "success" ? "bg-green-950/95 border-green-600 text-green-200 shadow-green-950/50" :
+    type === "error" ? "bg-red-950/95 border-red-600 text-red-200 shadow-red-950/50" :
+    type === "warning" ? "bg-yellow-950/95 border-yellow-600 text-yellow-200 shadow-yellow-950/50" :
+    "bg-gray-900/95 border-gray-700 text-gray-200 shadow-black/60"
   }`;
 
-  const icon = type === "success" ? "fa-circle-check" :
-               type === "error" ? "fa-circle-xmark" :
-               type === "warning" ? "fa-triangle-exclamation" : "fa-circle-info";
+  const icon = type === "success" ? "fa-circle-check text-green-400" :
+               type === "error" ? "fa-circle-xmark text-red-400" :
+               type === "warning" ? "fa-triangle-exclamation text-yellow-400" : "fa-circle-info text-blue-400";
 
   toast.innerHTML = `
-    <i class="fa-solid ${icon} text-base flex-shrink-0"></i>
+    <i class="fa-solid ${icon} text-lg flex-shrink-0"></i>
     <span class="flex-1 leading-relaxed">${message}</span>
+    <button onclick="this.parentElement.remove()" class="text-gray-400 hover:text-white p-1 transition"><i class="fa-solid fa-xmark"></i></button>
   `;
 
   container.appendChild(toast);
 
   requestAnimationFrame(() => {
-    toast.classList.remove("translate-y-2", "opacity-0");
+    toast.classList.remove("translate-y-4", "opacity-0");
   });
 
   setTimeout(() => {
-    toast.classList.add("translate-y-2", "opacity-0");
-    setTimeout(() => toast.remove(), 300);
+    toast.classList.add("translate-y-4", "opacity-0");
+    setTimeout(() => toast.remove(), 350);
   }, 4000);
 }
+
+// Thay thế window.alert mặc định của trình duyệt để không bao giờ hiện popup 'localhost:5000 cho biết'
+window.alert = function(msg) {
+  showToast(String(msg), "info");
+};
 
 // ==================== ADMIN LOGIN PORTAL (TRANG ĐĂNG NHẬP RIÊNG CHO QUẢN TRỊ VIÊN) ==================== //
 

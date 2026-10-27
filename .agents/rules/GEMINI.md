@@ -9,7 +9,7 @@ Kiến trúc gồm 2 tầng chính: **Express.js Backend** (Port 5000) và **Van
 - **Backend**: Node.js + Express.js (CommonJS modules)
 - **Frontend**: HTML5 + CSS3 + Vanilla JavaScript (không dùng framework)
 - **AI Engine**: Rule-based NLU + Hybrid Recommendation (mô phỏng)
-- **Data**: In-memory mock data (không có database thực)
+- **Database**: MySQL Server 8.0+ (qua `mysql2/promise` connection pool) + In-memory fallback dự phòng
 - **Port**: 5000 (backend serve luôn static frontend)
 
 ---
@@ -25,13 +25,20 @@ Hệ-Thống-Quản-Lý-Rạp-Chiếu-Phim/
 │       ├── cinema-ai-agents/SKILL.md ← Hướng dẫn AI agents
 │       └── cinema-admin/SKILL.md     ← Quản trị hệ thống
 ├── backend/
+│   ├── database/
+│   │   ├── schema.sql                ← Script DDL tạo 8 bảng MySQL chuẩn UTF8MB4
+│   │   └── initDb.js                 ← Script migration tự động: npm run db:init
 │   └── src/
+│       ├── config/
+│       │   └── database.js           ← MySQL Connection Pool (mysql2/promise)
 │       ├── agents/                   ← AI Agent classes (chuyên biệt)
 │       │   ├── bookingAgent.js
 │       │   ├── recommendationAgent.js
 │       │   ├── customerServiceAgent.js
 │       │   └── adminAnalyticsAgent.js
 │       ├── services/
+│       │   ├── dbService.js          ← Data Access Layer (MySQL + Mock Fallback)
+│       │   ├── authService.js        ← Xác thực & CGV Membership
 │       │   ├── aiService.js          ← Orchestrator điều phối agents
 │       │   └── seatLockService.js    ← Quản lý khóa ghế TTL 10 phút
 │       ├── data/mockData.js          ← Dữ liệu phim, phòng, ghế, suất chiếu
@@ -111,11 +118,11 @@ Hệ-Thống-Quản-Lý-Rạp-Chiếu-Phim/
 
 ## Các Lưu Ý Quan Trọng (Gotchas)
 
-1. **seatLockService** dùng in-memory Map — restart server sẽ mất trạng thái ghế
-2. **mockData** được import trực tiếp — thay đổi data cần restart server
-3. **Frontend** được serve qua `express.static()` — path là `../../frontend` từ `src/`
-4. **Không có Auth** — `userId` là string tùy ý, không có session thực
-5. **AI responses** là deterministic (không random) để demo ổn định
+1. **MySQL Database**: Chạy `npm run db:init` trong thư mục `backend/` để tự động tạo CSDL `cinema_db` và nạp dữ liệu.
+2. **Chế độ kép (Dual-Mode)**: Nếu MySQL chưa bật, hệ thống tự động fallback sang `mockData` để đảm bảo ứng dụng không bao giờ bị sập. Cấu hình bật/tắt qua `USE_MYSQL=true/false` trong `backend/.env`.
+3. **seatLockService** dùng in-memory Map — kiểm soát khóa ghế TTL 10 phút thời gian thực (chuẩn Redis simulation).
+4. **Frontend** được serve qua `express.static()` — path là `../../frontend` từ `src/`
+5. **AI responses** là deterministic (không random) để demo ổn định. Có thể tích hợp Gemini API qua `GEMINI_API_KEY`.
 6. Khi thêm agent mới → phải import trong `aiService.js` VÀ thêm route trong `server.js`
 
 ---

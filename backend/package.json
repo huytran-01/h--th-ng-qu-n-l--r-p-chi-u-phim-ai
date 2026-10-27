@@ -4,12 +4,14 @@
   "description": "Backend API cho Hệ thống Quản lý Rạp chiếu phim tích hợp Trí tuệ Nhân tạo (AI)",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "db:init": "node database/initDb.js"
   },
   "dependencies": {
     "@google/genai": "^2.31.0",
     "cors": "^2.8.5",
     "dotenv": "^18.0.9",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "mysql2": "^3.24.6"
   }
 }

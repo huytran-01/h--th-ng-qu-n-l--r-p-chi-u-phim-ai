@@ -21,11 +21,11 @@ const movies = [
     trendingScore: 98
   },
   {
-    name: "Nguyễn Quang Huy",
+    id: "mov-02",
     title: "Mai",
     originalTitle: "Mai",
     status: "NOW_SHOWING",
-    role: "ADMIN",
+    durationMinutes: 131,
     releaseDate: "2024-02-10",
     ageRating: "T18",
     genres: ["Tâm lý", "Tình cảm", "Chính kịch"],
