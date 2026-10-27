@@ -2,7 +2,7 @@
 name: cinema-system-testing
 description: >-
   Agent kiểm thử hệ thống cinema end-to-end: tự động kiểm tra startup, REST API,
-  authentication, RBAC, catalog, booking khóa ghế, checkout QR, AI, Admin CRUD
+  authentication, RBAC 3 tác nhân, catalog, booking khóa ghế, checkout QR, AI, Admin CRUD
   và frontend smoke test; tạo báo cáo pass/fail có bằng chứng và không lộ secret.
   Dùng khi cần test toàn hệ thống, regression test hoặc xác nhận release.
 ---
@@ -24,8 +24,9 @@ expected result và bằng chứng; không ghi Bearer token hoặc password vào
 - Authentication: register, login, me, logout, demo users.
 - Booking: lock ghế TTL 600 giây, conflict giữa hai user, checkout, combo, QR,
   booking history và trạng thái ghế `BOOKED`.
-- RBAC: CUSTOMER, STAFF, MANAGER, ADMIN; kiểm tra cả quyền được phép và bị từ
-  chối bằng HTTP `401` hoặc `403`.
+- RBAC 3 Tác Nhân: CUSTOMER (Khách hàng), STAFF (Nhân viên rạp), ADMIN (Quản trị viên);
+  kiểm tra cả quyền được phép và bị từ chối bằng HTTP `401` hoặc `403`.
+- Soát vé POS: Kiểm tra API `/api/v1/bookings/check-in` cho STAFF.
 - AI: recommendations, chat, booking-assist, similar movies, explain,
   profile, feedback, demand forecast.
 - Admin: movies, showtimes, users, bookings, daily report, schedule,
@@ -44,10 +45,9 @@ npm start
 Mặc định dùng `http://localhost:5000`. Nếu port 5000 đã có server, dùng server
 đó và không khởi động thêm process. Các tài khoản demo chỉ dùng trong local:
 
-- CUSTOMER: `customer@aicinema.vn` / `123456`, id `user_guest`.
-- STAFF: `minhanh@aicinema.vn` / `123456`, id `staff_001`.
-- MANAGER: `huy@aicinema.vn` / `123456`, id `manager_001`.
-- ADMIN: `admin@aicinema.vn` / `admin123`, id `admin_001`.
+- CUSTOMER (Khách hàng): `customer@aicinema.vn` / `123456`, id `user_guest`.
+- STAFF (Nhân viên rạp): `minhanh@aicinema.vn` / `123456`, id `staff_001`.
+- ADMIN (Quản trị viên): `admin@aicinema.vn` / `admin123`, id `admin_001`.
 
 Không đưa password, token hoặc dữ liệu cá nhân vào báo cáo. Có thể dùng
 `GET /api/v1/auth/demo-users` để xác minh danh sách demo nhưng không lưu response
@@ -99,22 +99,3 @@ nhạy cảm vào artifact.
 - Lỗi P1: hỏng booking, CRUD chính, login hoặc AI endpoint cốt lõi.
 - Lỗi P2: lỗi lọc/phân trang/UI hoặc thông báo không chính xác.
 - Lỗi P3: lỗi hiển thị nhỏ không ảnh hưởng nghiệp vụ.
-
-## Bằng chứng và đầu ra
-
-Mỗi lần chạy tạo hoặc cập nhật báo cáo theo mẫu:
-
-```text
-Run: YYYY-MM-DD HH:mm, commit/version: <value>
-Environment: Windows, Node <version>, API <base-url>
-Scope: <test IDs>
-Summary: <passed>/<total> passed, <failed> failed, <blocked> blocked
-Failures:
-- <TEST-ID> | HTTP <actual> | expected <expected> | repro <short steps>
-Risk: <P0-P3 and impact>
-Artifacts: <safe screenshots/log paths, no token/password>
-```
-
-Khi phát hiện lỗi, báo cáo endpoint/view, role, input tối thiểu, response/status,
-expected behavior và bước tái hiện. Không tự sửa code trong bước test trừ khi user
-đã yêu cầu debug/fix; khi đó tạo regression test cho lỗi trước khi sửa.

@@ -437,14 +437,14 @@ const users = [
     createdAt: "2024-01-01T08:00:00.000Z"
   },
   {
-    id: "manager_001",
-    name: "Nguyễn Quang Huy",
-    email: "huy@aicinema.vn",
+    id: "staff_002",
+    name: "Trần Bảo Nam",
+    email: "baonam@aicinema.vn",
     password: "123456",
     phone: "0902002002",
-    role: "MANAGER",
-    memberCardNumber: "9999-0000-MGR-0001",
-    memberTier: "INTERNAL",
+    role: "STAFF",
+    memberCardNumber: "9999-0000-STAFF-002",
+    memberTier: "STAFF",
     points: 0,
     totalSpent: 0,
     favoriteGenres: [],
@@ -469,8 +469,8 @@ const users = [
 ];
 
 const bookings = [
-  { bookingCode: "BKG-240901", userId: "user_guest", movieId: "mov-01", showtimeId: "st-101", seats: ["D5", "D6"], total: 450000, status: "PAID", bookedAt: "2026-09-22T10:30:00.000Z" },
-  { bookingCode: "BKG-240842", userId: "user_guest", movieId: "mov-03", showtimeId: "st-105", seats: ["E4"], total: 200000, status: "PAID", bookedAt: "2026-09-21T12:10:00.000Z" }
+  { bookingCode: "BKG-240901", qrToken: "CGV-TICKET-BKG-240901-XYZ1", userId: "user_guest", movieId: "mov-01", showtimeId: "st-101", seats: ["D5", "D6"], total: 450000, status: "PAID", bookedAt: "2026-09-22T10:30:00.000Z" },
+  { bookingCode: "BKG-240842", qrToken: "CGV-TICKET-BKG-240842-XYZ2", userId: "user_guest", movieId: "mov-03", showtimeId: "st-105", seats: ["E4"], total: 200000, status: "PAID", bookedAt: "2026-09-21T12:10:00.000Z" }
 ];
 
 module.exports = {

@@ -1,11 +1,11 @@
 ---
 name: cinema-qa-e2e
 description: >-
-  Hướng dẫn kiểm thử website cinema: smoke test backend, RBAC, đặt vé, khóa ghế
+  Hướng dẫn kiểm thử website cinema: smoke test backend, RBAC 3 tác nhân, đặt vé, khóa ghế
   TTL, checkout QR, Admin CRUD, AI endpoints và kiểm tra giao diện responsive.
 ---
 
-# Cinema QA & E2E
+# Cinema QA & E2E (Kiểm Thử 3 Tác Nhân)
 
 ## Khởi động
 
@@ -25,7 +25,7 @@ Mặc định kiểm tra tại `http://localhost:5000`. Nếu port đã được
 3. Login admin trả token.
 4. Admin gọi được `/admin/daily-report` và `/ai/demand-forecast`.
 5. Customer không gọi được endpoint Admin cần quyền.
-6. Staff không gọi được `/admin/users`.
+6. Staff (Nhân viên rạp) gọi được `/api/v1/bookings/check-in` và không gọi được `/admin/users`.
 
 ## Luồng booking
 
@@ -37,13 +37,14 @@ Mặc định kiểm tra tại `http://localhost:5000`. Nếu port đã được
 6. Kiểm tra booking code, QR token, tổng tiền và booking history.
 7. Thử checkout ghế chưa lock để bảo đảm API trả `409`.
 
-## Luồng Admin
+## Luồng Nghiệp vụ & Admin
 
-- Tạo, sửa, xóa phim.
+- Nhân viên rạp: Soát vé bằng mã đơn hoặc mã QR qua `/api/v1/bookings/check-in`.
+- Quản trị viên: Tạo, sửa, xóa phim.
 - Bật/tắt `isHot`.
-- Tạo, sửa, xóa suất chiếu.
-- Admin tạo/sửa role user.
-- Manager bị từ chối ở user management.
+- Quản trị viên: Tạo, sửa, xóa suất chiếu.
+- Quản trị viên: Tạo/sửa role user (CUSTOMER, STAFF, ADMIN).
+- Staff bị từ chối ở user management và movies management.
 - Tìm kiếm và phân trang không làm mất filter.
 
 ## Kiểm tra frontend

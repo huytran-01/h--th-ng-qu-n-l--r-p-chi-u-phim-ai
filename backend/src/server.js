@@ -12,12 +12,14 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Hệ thống phân quyền RBAC (Role-Based Access Control)
+// Chuẩn hóa 3 vai trò chính theo đồ án: CUSTOMER (Khách hàng), STAFF (Nhân viên rạp), ADMIN (Quản trị viên)
 const ROLE_PERMISSIONS = {
   CUSTOMER: ["movies.read", "bookings.create", "recommendations.read", "profile.manage"],
   STAFF: ["movies.read", "bookings.create", "bookings.read", "bookings.scan", "support.manage"],
-  MANAGER: ["movies.read", "movies.manage", "bookings.read", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage"],
-  ADMIN: ["movies.read", "movies.manage", "bookings.read", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage", "users.manage", "system.manage"]
+  ADMIN: ["movies.read", "movies.manage", "bookings.read", "bookings.scan", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage", "users.manage", "system.manage"]
 };
+// Tương thích ngược: MANAGER tự động ánh xạ quyền của STAFF
+ROLE_PERMISSIONS.MANAGER = ROLE_PERMISSIONS.STAFF;
 
 /**
  * Middleware kiểm tra quyền truy cập:
@@ -363,6 +365,61 @@ app.get("/api/v1/admin/bookings", requirePermission("bookings.read"), (req, res)
     summary: {
       totalTickets: detailedBookings.reduce((sum, booking) => sum + (booking.seats?.length || 0), 0),
       totalRevenue: detailedBookings.reduce((sum, booking) => sum + Number(booking.total || 0), 0)
+    }
+  });
+});
+
+// Xác nhận soát vé / Check-in QR khi khách vào rạp (Dành cho Nhân viên rạp & Admin)
+app.post("/api/v1/bookings/check-in", requirePermission("bookings.scan"), (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ status: "ERROR", message: "Vui lòng cung cấp mã đặt vé hoặc mã QR để soát vé." });
+  }
+
+  const cleanCode = String(code).trim().toUpperCase();
+  const booking = bookings.find(b =>
+    (b.bookingCode && b.bookingCode.toUpperCase() === cleanCode) ||
+    (b.qrToken && b.qrToken.toUpperCase() === cleanCode)
+  );
+
+  if (!booking) {
+    return res.status(404).json({ status: "ERROR", message: `Không tìm thấy thông tin vé với mã "${code}".` });
+  }
+
+  if (booking.status === "CHECKED_IN") {
+    return res.status(400).json({
+      status: "ALREADY_CHECKED_IN",
+      message: `Vé ${booking.bookingCode} đã được soát vé vào rạp lúc ${booking.checkedInAt ? new Date(booking.checkedInBy ? booking.checkedInAt : booking.checkedInAt).toLocaleString("vi-VN") : "trước đó"}. Không thể tái sử dụng!`
+    });
+  }
+
+  if (booking.status === "CANCELLED" || booking.status === "REFUNDED") {
+    return res.status(400).json({
+      status: "INVALID",
+      message: `Vé ${booking.bookingCode} đang ở trạng thái "${booking.status}" (Đã hủy hoặc đã hoàn tiền), không được phép vào rạp.`
+    });
+  }
+
+  // Cập nhật trạng thái sang CHECKED_IN
+  booking.status = "CHECKED_IN";
+  booking.checkedInAt = new Date().toISOString();
+  booking.checkedInBy = req.user ? req.user.name : "Nhân viên rạp";
+
+  const movie = movies.find(m => m.id === booking.movieId);
+  const showtime = showtimes.find(st => st.id === booking.showtimeId);
+  const room = showtime ? rooms.find(r => r.id === showtime.roomId) : null;
+
+  res.json({
+    status: "SUCCESS",
+    message: `Xác nhận soát vé thành công cho mã ${booking.bookingCode}! Mời khách vào rạp.`,
+    data: {
+      bookingCode: booking.bookingCode,
+      movieTitle: movie ? movie.title : "Phim chiếu rạp",
+      showtimeStart: showtime ? showtime.startTime : "",
+      roomName: room ? room.name : "Phòng chiếu",
+      seats: booking.seats,
+      checkedInAt: booking.checkedInAt,
+      checkedInBy: booking.checkedInBy
     }
   });
 });
