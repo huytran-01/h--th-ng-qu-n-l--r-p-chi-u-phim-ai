@@ -93,53 +93,55 @@
 
   <!-- ==================== HEADER & NAVBAR ==================== -->
   <header class="sticky top-0 z-40 bg-cgv-black/95 backdrop-blur border-b border-gray-800">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
       
       <!-- CGV Brand Logo -->
-      <div class="flex items-center space-x-3.5 cursor-pointer" onclick="switchView('home')">
-        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cgv-red to-orange-600 flex items-center justify-center text-white text-2xl font-black shadow-lg shadow-red-600/40 tracking-tighter">
+      <div class="flex items-center space-x-3 cursor-pointer flex-shrink-0" onclick="switchView('home')">
+        <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-cgv-red to-orange-600 flex items-center justify-center text-white text-xl font-black shadow-lg shadow-red-600/40 tracking-tighter">
           CGV
         </div>
         <div>
-          <div class="flex items-center space-x-1.5">
-            <span class="text-2xl font-black tracking-wider text-white">CGV</span>
-            <span class="text-xl font-bold tracking-wider text-cgv-red">CINEMAS</span>
+          <div class="flex items-center space-x-1.5 leading-none">
+            <span class="text-xl font-black tracking-wider text-white">CGV</span>
+            <span class="text-lg font-bold tracking-wider text-cgv-red">CINEMAS</span>
           </div>
-          <span class="block text-[9px] uppercase font-bold tracking-widest text-cgv-gold">Cultureplex Experience</span>
+          <span class="block text-[8.5px] uppercase font-bold tracking-widest text-cgv-gold mt-0.5">Cultureplex Experience</span>
         </div>
       </div>
 
-      <!-- Navigation Links -->
-      <nav class="hidden md:flex items-center space-x-6 font-medium text-sm">
-        <a href="javascript:void(0)" onclick="switchView('home')" class="nav-item text-cgv-red font-bold transition hover:text-red-400">
-          <i class="fa-solid fa-house mr-1.5"></i>Trang Chủ
+      <!-- Navigation Links: whitespace-nowrap chống rớt dòng, căn chỉnh cân đối đẹp mắt -->
+      <nav class="hidden md:flex items-center gap-1.5 lg:gap-2.5 font-medium text-xs lg:text-sm">
+        <a href="javascript:void(0)" onclick="switchView('home')" class="nav-item whitespace-nowrap text-cgv-red font-bold px-2.5 py-1.5 rounded-xl hover:bg-gray-800/60 transition flex items-center">
+          <i class="fa-solid fa-house mr-1.5"></i><span>Trang Chủ</span>
         </a>
-        <a href="javascript:void(0)" onclick="scrollToCustomerMovies('NOW_SHOWING')" class="nav-item text-gray-300 hover:text-white transition">
-          <i class="fa-solid fa-film mr-1.5"></i>Phim Đang Chiếu
+        <a href="javascript:void(0)" onclick="scrollToCustomerMovies('NOW_SHOWING')" class="nav-item whitespace-nowrap text-gray-300 hover:text-white px-2.5 py-1.5 rounded-xl hover:bg-gray-800/60 transition flex items-center">
+          <i class="fa-solid fa-film mr-1.5 text-cgv-red"></i><span>Phim Đang Chiếu</span>
         </a>
-        <a href="javascript:void(0)" onclick="scrollToCustomerMovies('COMING_SOON')" class="nav-item text-gray-300 hover:text-white transition">
-          <i class="fa-solid fa-clock mr-1.5"></i>Phim Sắp Chiếu
+        <a href="javascript:void(0)" onclick="scrollToCustomerMovies('COMING_SOON')" class="nav-item whitespace-nowrap text-gray-300 hover:text-white px-2.5 py-1.5 rounded-xl hover:bg-gray-800/60 transition flex items-center">
+          <i class="fa-solid fa-clock mr-1.5 text-yellow-500"></i><span>Phim Sắp Chiếu</span>
         </a>
-        <a href="javascript:void(0)" onclick="switchView('ai-lab')" class="nav-item text-cyan-300 hover:text-cyan-200 transition">
-          <i class="fa-solid fa-brain mr-1.5"></i>Gợi Ý AI
+        <a href="javascript:void(0)" onclick="switchView('ai-lab')" class="nav-item whitespace-nowrap text-cyan-300 hover:text-cyan-200 px-2.5 py-1.5 rounded-xl hover:bg-cyan-950/40 transition flex items-center">
+          <i class="fa-solid fa-brain mr-1.5 text-cyan-400"></i><span>Gợi Ý AI</span>
         </a>
-        <a href="javascript:void(0)" onclick="switchView('account')" class="nav-item text-cgv-gold hover:text-yellow-300 transition">
-          <i class="fa-solid fa-crown mr-1.5"></i>Thành Viên CGV
+        <a href="javascript:void(0)" onclick="switchView('account')" class="nav-item whitespace-nowrap text-cgv-gold hover:text-yellow-300 px-2.5 py-1.5 rounded-xl hover:bg-yellow-950/40 transition flex items-center">
+          <i class="fa-solid fa-crown mr-1.5 text-cgv-gold"></i><span>Thành Viên CGV</span>
         </a>
-        <a href="javascript:void(0)" onclick="handleAdminNavClick()" id="nav-admin-link" class="nav-item text-gray-300 hover:text-white transition flex items-center">
-          <i class="fa-solid fa-shield-halved mr-1.5"></i>Quản Trị Admin
-          <span id="nav-admin-badge" class="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-red-950 text-red-400 border border-red-800 font-bold">Admin</span>
+        
+        <!-- Nút Nghiệp Vụ Nhân Viên Rạp (ẨN MẶC ĐỊNH, CHỈ HIỆN KHI LÀ STAFF HOẶC ADMIN) -->
+        <a href="javascript:void(0)" onclick="switchView('staff')" id="nav-staff-link" style="display: none;" class="hidden nav-item whitespace-nowrap text-green-400 hover:text-green-300 px-2.5 py-1.5 rounded-xl bg-green-950/40 border border-green-800/70 transition flex items-center font-bold">
+          <i class="fa-solid fa-cash-register mr-1.5"></i><span>Nghiệp Vụ Soát Vé</span>
+          <span class="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-green-950 text-green-400 border border-green-800 font-bold">Staff</span>
+        </a>
+        
+        <!-- Nút Quản Trị Hệ Thống (ẨN MẶC ĐỊNH, CHỈ HIỆN KHI LÀ ADMIN) -->
+        <a href="javascript:void(0)" onclick="switchView('admin')" id="nav-admin-link" style="display: none;" class="hidden nav-item whitespace-nowrap text-red-400 hover:text-red-300 px-2.5 py-1.5 rounded-xl bg-red-950/40 border border-red-800/70 transition flex items-center font-bold">
+          <i class="fa-solid fa-shield-halved mr-1.5"></i><span>Quản Trị Hệ Thống</span>
+          <span class="ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-red-950 text-red-400 border border-red-800 font-bold">Admin</span>
         </a>
       </nav>
 
       <!-- User Profile & Action -->
-      <div class="flex items-center space-x-4">
-        <!-- Floating Chatbot Toggle -->
-        <button onclick="toggleChatbot()" class="relative p-2.5 rounded-xl bg-red-950/60 border border-red-500/30 text-red-400 hover:bg-red-900/60 transition cgv-glow" title="Trợ lý ảo AI CGV Cinema">
-          <i class="fa-solid fa-robot text-lg"></i>
-          <span class="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-ping"></span>
-          <span class="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full"></span>
-        </button>
+      <div class="flex items-center space-x-3.5 flex-shrink-0">
 
         <!-- Trạng thái CHƯA ĐĂNG NHẬP -->
         <div id="auth-unlogged-section" class="flex items-center space-x-2">
@@ -181,8 +183,11 @@
               <a href="javascript:void(0)" onclick="switchView('account'); closeUserDropdown()" class="flex items-center px-3 py-2 rounded-xl text-gray-300 hover:bg-gray-800 hover:text-white">
                 <i class="fa-solid fa-ticket w-5 text-cgv-red"></i>Lịch sử vé đã mua
               </a>
+              <a href="javascript:void(0)" id="dropdown-staff-link" onclick="switchView('staff'); closeUserDropdown()" class="hidden flex items-center px-3 py-2 rounded-xl text-green-300 hover:bg-green-950/40 hover:text-green-200">
+                <i class="fa-solid fa-cash-register w-5 text-green-400"></i>Nghiệp vụ Soát vé (Staff)
+              </a>
               <a href="javascript:void(0)" id="dropdown-admin-link" onclick="switchView('admin'); closeUserDropdown()" class="hidden flex items-center px-3 py-2 rounded-xl text-red-300 hover:bg-red-950/40 hover:text-red-200">
-                <i class="fa-solid fa-shield-halved w-5 text-red-400"></i>Khu vực Quản trị Admin
+                <i class="fa-solid fa-shield-halved w-5 text-red-400"></i>Quản trị Hệ thống (Admin)
               </a>
             </div>
             <div class="pt-1 border-t border-gray-800">
@@ -683,7 +688,116 @@
 
     </div>
 
-    <!-- VIEW 3: AI LAB & RECOMMENDATION STUDIO -->
+    <!-- VIEW: PHÂN HỆ NGHIỆP VỤ NHÂN VIÊN RẠP (STAFF POS & TICKET SCANNING WORKSPACE) -->
+    <div id="staff-view" class="hidden py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <!-- Header Staff -->
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-gray-800 mb-8">
+        <div>
+          <div class="inline-flex items-center space-x-2 px-3.5 py-1 rounded-full bg-green-950 text-green-400 border border-green-800 text-xs font-bold mb-2">
+            <i class="fa-solid fa-cash-register mr-1"></i>
+            <span>Phân Hệ Vận Hành • Dành Riêng Cho Nhân Viên Rạp (Staff Only)</span>
+          </div>
+          <h1 class="text-3xl font-black text-white">Quầy Soát Vé & Nghiệp Vụ Rạp (POS)</h1>
+          <p class="text-sm text-gray-400 mt-1">Kiểm tra mã vé, quét mã QR check-in khách vào phòng chiếu và tra cứu lịch sử đơn vé.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="staff-user-tag" class="px-3.5 py-1.5 rounded-xl bg-gray-900 border border-green-800/80 text-xs text-green-300 font-bold flex items-center shadow">
+            <i class="fa-solid fa-user-check mr-2 text-green-400"></i>Nhân viên rạp
+          </span>
+          <button onclick="switchView('home')" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition flex items-center gap-1.5">
+            <i class="fa-solid fa-arrow-left"></i> Về Trang Khách Hàng
+          </button>
+        </div>
+      </div>
+
+      <!-- Khung Thao Tác Soát Vé Nhanh POS -->
+      <div class="p-6 rounded-2xl bg-gradient-to-r from-gray-900 via-gray-900 to-green-950/40 border border-green-800/70 shadow-2xl mb-8">
+        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-green-950 border border-green-600 flex items-center justify-center text-green-400 text-2xl shadow-lg shadow-green-900/40">
+              <i class="fa-solid fa-qrcode"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-black text-white flex items-center gap-2">
+                Cổng Xác Thực & Soát Vé Vào Rạp
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-950 text-green-300 border border-green-800">Sẵn sàng</span>
+              </h3>
+              <p class="text-xs text-gray-400 mt-1">Nhập mã vé (VD: CGV-xxxxxx hoặc BKG-xxxxxx) hoặc nội dung mã QR của khách hàng để check-in.</p>
+            </div>
+          </div>
+          
+          <div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
+            <div class="relative w-full sm:w-72">
+              <i class="fa-solid fa-ticket absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+              <input type="text" id="staff-checkin-input" placeholder="Nhập mã vé hoặc mã QR..." class="bg-gray-900 border border-gray-700 text-xs rounded-xl pl-9 pr-3 py-2.5 text-gray-200 focus:outline-none focus:border-green-500 w-full font-mono">
+            </div>
+            <button onclick="handleStaffQuickCheckIn()" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-green-700 to-emerald-600 hover:from-green-600 hover:to-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-green-700/30">
+              <i class="fa-solid fa-circle-check text-sm"></i>
+              <span>Xác Nhận Cho Vào Rạp</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Khung phản hồi kết quả soát vé trực quan -->
+        <div id="staff-checkin-result" class="hidden mt-5 p-4 rounded-xl bg-gray-950/80 border border-gray-800 text-xs transition"></div>
+      </div>
+
+      <!-- Bảng Quản Lý & Tra Cứu Toàn Bộ Đơn Vé Của Khách Hàng -->
+      <div class="space-y-4">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-list-check text-cgv-red"></i>
+              Danh Sách Vé Khách Hàng Đã Đặt
+            </h3>
+            <p class="text-xs text-gray-400">Tra cứu nhanh mã vé, thông tin ghế, suất chiếu và thực hiện soát vé thủ công.</p>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-cgv-card border border-gray-800 flex flex-col xl:flex-row items-center justify-between gap-4">
+          <div class="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-1">
+            <div class="relative w-full sm:max-w-sm">
+              <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+              <input type="text" id="staff-booking-search" oninput="handleStaffBookingSearch(this.value)" placeholder="Tìm mã vé, khách hàng, phim..." class="field pl-9">
+            </div>
+            <select id="staff-booking-status" onchange="handleStaffBookingStatusFilter(this.value)" class="w-full sm:w-auto bg-gray-900 border border-gray-700 text-xs rounded-xl px-3 py-2 text-gray-300 focus:outline-none">
+              <option value="ALL">Tất cả trạng thái</option>
+              <option value="PAID">Đã thanh toán (Chờ soát vé)</option>
+              <option value="CHECKED_IN">Đã soát vé vào rạp</option>
+              <option value="CANCELLED">Đã hủy / Hoàn tiền</option>
+            </select>
+            <input type="date" id="staff-booking-date" onchange="handleStaffBookingDateFilter(this.value)" class="w-full sm:w-auto bg-gray-900 border border-gray-700 text-xs rounded-xl px-3 py-2 text-gray-300 focus:outline-none" title="Lọc theo ngày đặt vé">
+          </div>
+          <div class="flex items-center gap-5 text-xs whitespace-nowrap">
+            <span class="text-gray-400">Vé: <b id="staff-booking-total-tickets" class="text-white">0</b></span>
+            <span class="text-gray-400">Doanh thu: <b id="staff-booking-total-revenue" class="text-cgv-gold">0 đ</b></span>
+          </div>
+        </div>
+
+        <div class="rounded-2xl bg-cgv-card border border-gray-800 overflow-hidden shadow-xl">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-gray-900/80 text-gray-400 uppercase tracking-wider text-[11px] border-b border-gray-800">
+                <tr>
+                  <th class="p-4">Mã vé / Thời gian</th>
+                  <th class="p-4">Khách hàng</th>
+                  <th class="p-4">Phim / Suất chiếu</th>
+                  <th class="p-4">Phòng / Ghế</th>
+                  <th class="p-4">Tổng tiền</th>
+                  <th class="p-4">Trạng thái</th>
+                  <th class="p-4 text-center">Soát vé vào rạp</th>
+                </tr>
+              </thead>
+              <tbody id="staff-bookings-table-body" class="divide-y divide-gray-800"></tbody>
+            </table>
+          </div>
+          <div class="p-4 bg-gray-900/60 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <span id="staff-bookings-pagination-info" class="text-gray-400">Đang tải...</span>
+            <div id="staff-bookings-pagination-controls" class="flex items-center space-x-1.5"></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="ai-lab-view" class="hidden py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-6 border-b border-gray-800 mb-8">
         <div>
@@ -1465,7 +1579,7 @@
     </div>
   </div>
 
-  <!-- Frontend Logic Script -->
-  <script src="/src/app.js"></script>
+  <!-- Frontend Logic Script (Cache-busting version) -->
+  <script src="/src/app.js?v=2.6.1"></script>
 </body>
 </html>
