@@ -79,7 +79,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     fetchCustomerMovies(),
     fetchCinemas(),
     fetchAIRecommendations(),
-    fetchCombos()
+    fetchCombos(),
+    checkGeminiStatus()
   ]);
 
   initQuickBookingBar();
@@ -2090,9 +2091,72 @@ function triggerConfetti() {
 
 // ==================== AI CHATBOT NLU ==================== //
 
-function toggleChatbot() {
+// ==================== AI CHATBOT (GEMINI & NLU) ==================== //
+
+async function toggleChatbot() {
   const win = document.getElementById("chatbot-window");
-  if (win) win.classList.toggle("hidden");
+  if (win) {
+    const isHidden = win.classList.toggle("hidden");
+    if (!isHidden) {
+      await checkGeminiStatus();
+    }
+  }
+}
+
+async function checkGeminiStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/ai/status`);
+    if (!res.ok) return;
+    const json = await res.json();
+    const indicator = document.getElementById("chatbot-status-indicator");
+    if (indicator && json.gemini) {
+      if (json.gemini.available) {
+        indicator.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles text-[9px] mr-1 text-cyan-400"></i>Hỗ trợ 24/7 (Google Gemini AI)`;
+        indicator.className = "block text-[10px] text-cyan-400 font-semibold";
+      } else {
+        indicator.innerHTML = `<i class="fa-solid fa-circle text-[8px] mr-1 text-green-400"></i>Hỗ trợ 24/7 (NLU Tiếng Việt)`;
+        indicator.className = "block text-[10px] text-green-400 font-semibold";
+      }
+    }
+  } catch (e) {
+    // Tự động bỏ qua lỗi kết nối
+  }
+}
+
+function showChatTyping() {
+  const container = document.getElementById("chat-messages");
+  if (!container || document.getElementById("chat-typing-indicator")) return;
+  const typingDiv = document.createElement("div");
+  typingDiv.id = "chat-typing-indicator";
+  typingDiv.className = "flex items-start space-x-2";
+  typingDiv.innerHTML = `
+    <div class="w-6 h-6 rounded-full bg-cgv-red text-white flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5">
+      <i class="fa-solid fa-robot"></i>
+    </div>
+    <div class="p-2.5 px-3.5 rounded-2xl rounded-tl-none bg-gray-800 text-gray-400 text-xs flex items-center space-x-1.5 shadow">
+      <span class="w-1.5 h-1.5 bg-red-400 rounded-full animate-bounce"></span>
+      <span class="w-1.5 h-1.5 bg-red-400 rounded-full animate-bounce" style="animation-delay: 0.15s"></span>
+      <span class="w-1.5 h-1.5 bg-red-400 rounded-full animate-bounce" style="animation-delay: 0.3s"></span>
+      <span class="ml-1 text-[10px] text-gray-400 font-medium">CGV AI đang suy nghĩ...</span>
+    </div>
+  `;
+  container.appendChild(typingDiv);
+  container.scrollTop = container.scrollHeight;
+}
+
+function hideChatTyping() {
+  const indicator = document.getElementById("chat-typing-indicator");
+  if (indicator) indicator.remove();
+}
+
+function renderQuickPrompts(questions) {
+  const container = document.getElementById("chatbot-quick-prompts");
+  if (!container || !Array.isArray(questions) || questions.length === 0) return;
+  container.innerHTML = questions.slice(0, 4).map(q => `
+    <button onclick="sendQuickPrompt('${escapeChatHTML(q)}')" class="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 hover:border-red-500/50 transition">
+      ${escapeChatHTML(q)}
+    </button>
+  `).join("");
 }
 
 async function handleChatSubmit(event) {
@@ -2103,6 +2167,7 @@ async function handleChatSubmit(event) {
 
   appendChatMessage(msg, "user");
   input.value = "";
+  showChatTyping();
 
   try {
     const res = await fetch(`${API_BASE}/ai/chat`, {
@@ -2111,12 +2176,18 @@ async function handleChatSubmit(event) {
       body: JSON.stringify({ message: msg, sessionId: "sess_cgv" })
     });
     const json = await res.json();
+    hideChatTyping();
+
     if (json.status === "SUCCESS") {
       appendChatMessage(json.reply || json.replyText || "Xin lỗi, AI chưa có câu trả lời phù hợp.", "bot", json.suggestedAction, json);
+      if (Array.isArray(json.suggestedQuestions) && json.suggestedQuestions.length > 0) {
+        renderQuickPrompts(json.suggestedQuestions);
+      }
     } else {
       appendChatMessage(json.message || "AI chưa thể xử lý yêu cầu này.", "bot");
     }
   } catch (err) {
+    hideChatTyping();
     appendChatMessage("Xin lỗi, hệ thống AI CGV đang bảo trì. Vui lòng thử lại sau.", "bot");
   }
 }
@@ -2157,28 +2228,38 @@ function appendChatMessage(text, sender, suggestedAction = null, responseData = 
   } else {
     let actionHTML = "";
     if (suggestedAction && suggestedAction.type === "BOOKING_MODAL") {
-      actionHTML = `<button onclick="openBookingModal('${escapeChatHTML(suggestedAction.movieId)}')" class="mt-2 block w-full py-1.5 rounded-lg bg-cgv-red hover:bg-red-700 text-white text-[11px] font-bold text-center">👉 Mở đặt vé ngay</button>`;
+      actionHTML = `<button onclick="openBookingModal('${escapeChatHTML(suggestedAction.movieId)}')" class="mt-2 block w-full py-1.5 rounded-lg bg-cgv-red hover:bg-red-700 text-white text-[11px] font-bold text-center transition">👉 Mở đặt vé ngay</button>`;
     }
     if (responseData?.suggestedMovies?.length) {
       actionHTML += `<div class="mt-2 space-y-1.5">${responseData.suggestedMovies.slice(0, 3).map(movie => `
-        <button onclick="openBookingModal('${escapeChatHTML(movie.id)}')" class="w-full flex items-center gap-2 p-1.5 rounded-lg bg-gray-900/80 hover:bg-gray-700 text-left">
+        <button onclick="openBookingModal('${escapeChatHTML(movie.id)}')" class="w-full flex items-center gap-2 p-1.5 rounded-lg bg-gray-900/80 hover:bg-gray-700 text-left transition">
           <img src="${escapeChatHTML(movie.posterUrl || '')}" alt="" class="w-7 h-9 rounded object-cover">
           <span class="text-[10px] font-semibold text-gray-200 truncate">${escapeChatHTML(movie.title)}</span>
         </button>`).join('')}</div>`;
     }
     if (responseData?.suggestedShowtimes?.length) {
       actionHTML += `<div class="mt-2 space-y-1.5">${responseData.suggestedShowtimes.slice(0, 3).map(showtime => `
-        <button onclick="openBookingModal('${escapeChatHTML(showtime.movieId)}')" class="w-full p-1.5 rounded-lg bg-red-950/50 hover:bg-red-900/70 text-left text-[10px] text-red-200">
+        <button onclick="openBookingModal('${escapeChatHTML(showtime.movieId)}')" class="w-full p-1.5 rounded-lg bg-red-950/50 hover:bg-red-900/70 text-left text-[10px] text-red-200 transition">
           <i class="fa-regular fa-clock mr-1"></i>${escapeChatHTML(showtime.startTime)} · ${escapeChatHTML(showtime.format || '2D')}
         </button>`).join('')}</div>`;
     }
+
+    const isGemini = Boolean(responseData?.model && responseData.model.includes("Gemini"));
+    const modelBadgeHTML = responseData?.model ? `
+      <div class="mt-1.5 pt-1 border-t border-gray-700/50 flex items-center gap-1.5 text-[9px] ${isGemini ? 'text-cyan-400' : 'text-gray-400'}">
+        <i class="${isGemini ? 'fa-solid fa-wand-magic-sparkles text-cyan-400' : 'fa-solid fa-robot text-gray-400'} text-[8px]"></i>
+        <span class="font-medium">${escapeChatHTML(responseData.model)}</span>
+      </div>
+    ` : "";
+
     msgDiv.innerHTML = `
-      <div class="w-6 h-6 rounded-full bg-cgv-red text-white flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5">
-        <i class="fa-solid fa-robot"></i>
+      <div class="w-6 h-6 rounded-full ${isGemini ? 'bg-gradient-to-tr from-cyan-600 to-blue-600' : 'bg-cgv-red'} text-white flex items-center justify-center text-[10px] flex-shrink-0 mt-0.5 shadow">
+        <i class="${isGemini ? 'fa-solid fa-sparkles' : 'fa-solid fa-robot'}"></i>
       </div>
       <div class="p-3 rounded-2xl rounded-tl-none bg-gray-800 text-gray-200 max-w-[82%] leading-relaxed shadow">
         ${formatChatText(text)}
         ${actionHTML}
+        ${modelBadgeHTML}
       </div>
     `;
   }

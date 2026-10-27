@@ -16,6 +16,7 @@ const bookingAgent        = require("../agents/bookingAgent");
 const recommendationAgent = require("../agents/recommendationAgent");
 const customerServiceAgent = require("../agents/customerServiceAgent");
 const adminAnalyticsAgent  = require("../agents/adminAnalyticsAgent");
+const geminiService        = require("./geminiService");
 
 class AIService {
   constructor() {
@@ -24,6 +25,7 @@ class AIService {
     this.recommendationAgent = recommendationAgent;
     this.customerServiceAgent = customerServiceAgent;
     this.adminAnalyticsAgent  = adminAnalyticsAgent;
+    this.geminiService        = geminiService;
     this.chatSessions = new Map();
   }
 
@@ -116,13 +118,48 @@ class AIService {
   // ==================== CHATBOT NLU APIs ==================== //
 
   /**
-   * Xử lý tin nhắn chatbot AI NLU tiếng Việt (Intent & Entity Extraction)
+   * Xử lý tin nhắn chatbot: Ưu tiên Google Gemini AI (nếu có key), tự động fallback sang Rule-based NLU
    * @param {string} message - Tin nhắn từ người dùng
    * @param {string} sessionId - ID phiên chat
    */
-  processChatbotMessage(message, sessionId = "sess_default") {
+  async processChatbotMessage(message, sessionId = "sess_default") {
     const session = this._getChatSession(sessionId);
 
+    // 1. Ưu tiên xử lý bằng Google Gemini AI (nếu đã cấu hình GEMINI_API_KEY)
+    if (this.geminiService && this.geminiService.isAvailable()) {
+      try {
+        const { combos } = require("../data/mockData");
+        const geminiResponse = await this.geminiService.generateChatReply({
+          message,
+          history: session.history || [],
+          movies,
+          showtimes,
+          combos
+        });
+
+        if (!session.history) session.history = [];
+        session.history.push({ sender: "user", text: message });
+        session.history.push({ sender: "bot", text: geminiResponse.replyText });
+        if (session.history.length > 8) session.history = session.history.slice(-8);
+
+        return geminiResponse;
+      } catch (geminiErr) {
+        console.warn("[AIService] Gemini API error, fallback to Rule-based NLU:", geminiErr.message);
+      }
+    }
+
+    // 2. Chế độ Fallback: Rule-based NLU tiếng Việt (Offline, Deterministic)
+    const fallbackResponse = this._processRuleBasedChat(message, session);
+    return {
+      ...fallbackResponse,
+      model: fallbackResponse.model || "Rule-based NLU (Offline fallback)"
+    };
+  }
+
+  /**
+   * Bộ xử lý hội thoại Rule-based NLU (Offline fallback)
+   */
+  _processRuleBasedChat(message, session) {
     // Xây thực thể trực tiếp từ catalog để phim mới tự động dùng được trong chat.
     const movieEntities = movies.flatMap(movie => {
       const aliases = [movie.title, movie.originalTitle, movie.title.split(":")[0]]
@@ -358,6 +395,13 @@ class AIService {
     const session = { lastMovieId: null, updatedAt: now };
     this.chatSessions.set(key, session);
     return session;
+  }
+
+  /**
+   * Lấy thông tin trạng thái tích hợp Google Gemini API
+   */
+  getGeminiStatus() {
+    return this.geminiService ? this.geminiService.getStatus() : { available: false, status: "NOT_LOADED" };
   }
 }
 

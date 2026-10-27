@@ -139,3 +139,4 @@ Hệ-Thống-Quản-Lý-Rạp-Chiếu-Phim/
 | POST | `/api/v1/support/refund` | CustomerServiceAgent |
 | GET | `/api/v1/admin/daily-report` | AdminAnalyticsAgent |
 | GET | `/api/v1/admin/optimal-schedule` | AdminAnalyticsAgent |
+| GET | `/api/v1/ai/status` | GeminiService & AIService |

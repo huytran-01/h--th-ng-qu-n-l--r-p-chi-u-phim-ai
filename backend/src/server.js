@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -478,19 +479,35 @@ app.get("/api/v1/ai/recommendations", (req, res) => {
   res.json({ status: "SUCCESS", model: "Hybrid_NCF_PhoBERT_v2.4", agent: "RecommendationAgent", data: recommendations });
 });
 
-app.post("/api/v1/ai/chat", (req, res) => {
-  const { message, sessionId } = req.body;
-  if (!message) return res.status(400).json({ status: "ERROR", message: "Nội dung tin nhắn không được trống" });
-  const botResponse = aiService.processChatbotMessage(message, sessionId);
-  const suggestedAction = botResponse.action === "SHOW_BOOKING_CARD" && botResponse.extractedEntities?.movie
-    ? { type: "BOOKING_MODAL", movieId: botResponse.extractedEntities.movie.id }
-    : null;
+// Kiểm tra trạng thái AI Engine & Google Gemini
+app.get("/api/v1/ai/status", (req, res) => {
+  const geminiStatus = aiService.getGeminiStatus();
   res.json({
     status: "SUCCESS",
-    ...botResponse,
-    reply: botResponse.replyText,
-    suggestedAction
+    gemini: geminiStatus,
+    activeEngine: geminiStatus.available ? "Google Gemini AI" : "Rule-based NLU (Offline)",
+    timestamp: new Date().toISOString()
   });
+});
+
+app.post("/api/v1/ai/chat", async (req, res) => {
+  try {
+    const { message, sessionId } = req.body;
+    if (!message) return res.status(400).json({ status: "ERROR", message: "Nội dung tin nhắn không được trống" });
+    const botResponse = await aiService.processChatbotMessage(message, sessionId);
+    const suggestedAction = botResponse.suggestedAction || (botResponse.action === "SHOW_BOOKING_CARD" && botResponse.extractedEntities?.movie
+      ? { type: "BOOKING_MODAL", movieId: botResponse.extractedEntities.movie.id }
+      : null);
+    res.json({
+      status: "SUCCESS",
+      ...botResponse,
+      reply: botResponse.replyText,
+      suggestedAction
+    });
+  } catch (err) {
+    console.error("Lỗi khi xử lý chatbot:", err);
+    res.status(500).json({ status: "ERROR", message: "Hệ thống AI đang bận, vui lòng thử lại sau ít phút." });
+  }
 });
 
 app.get("/api/v1/ai/demand-forecast", requirePermission("analytics.read"), (req, res) => {

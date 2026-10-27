@@ -1281,7 +1281,7 @@
           </div>
           <div>
             <span class="block text-xs font-black text-white">Trợ Lý Ảo CGV Cinema</span>
-            <span class="block text-[10px] text-green-400 font-semibold"><i class="fa-solid fa-circle text-[8px] mr-1"></i>Hỗ trợ 24/7 (NLU Tiếng Việt)</span>
+            <span id="chatbot-status-indicator" class="block text-[10px] text-green-400 font-semibold"><i class="fa-solid fa-circle text-[8px] mr-1"></i>Hỗ trợ 24/7 (NLU Tiếng Việt)</span>
           </div>
         </div>
         <button onclick="toggleChatbot()" class="text-gray-400 hover:text-white text-sm p-1">
@@ -1300,7 +1300,7 @@
         </div>
       </div>
 
-      <div class="p-2 border-t border-gray-800/80 bg-cgv-black/50 flex space-x-1.5 overflow-x-auto text-[11px] whitespace-nowrap">
+      <div id="chatbot-quick-prompts" class="p-2 border-t border-gray-800/80 bg-cgv-black/50 flex space-x-1.5 overflow-x-auto text-[11px] whitespace-nowrap">
         <button onclick="sendQuickPrompt('Gợi ý phim hot')" class="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-red-300 border border-red-800/50">✨ Gợi ý phim hot</button>
         <button onclick="sendQuickPrompt('Đặt 2 vé Dune 2 tối nay')" class="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-yellow-300 border border-yellow-800/50">🎟️ Đặt 2 vé Dune 2</button>
         <button onclick="sendQuickPrompt('Giá vé học sinh sinh viên?')" class="px-2.5 py-1 rounded-full bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700">💰 Giá vé HSSV</button>
