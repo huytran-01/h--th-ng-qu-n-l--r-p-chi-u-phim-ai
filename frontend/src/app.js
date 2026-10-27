@@ -130,14 +130,19 @@ async function fetchCurrentUser() {
 function updateAuthUI() {
   const unloggedSec = document.getElementById("auth-unlogged-section");
   const loggedSec = document.getElementById("auth-logged-section");
-  const navAdminBadge = document.getElementById("nav-admin-badge");
+  const navStaffLink = document.getElementById("nav-staff-link");
+  const navAdminLink = document.getElementById("nav-admin-link");
+  const dropdownStaffLink = document.getElementById("dropdown-staff-link");
   const dropdownAdminLink = document.getElementById("dropdown-admin-link");
 
   if (!currentUser) {
     if (unloggedSec) unloggedSec.classList.remove("hidden");
     if (loggedSec) loggedSec.classList.add("hidden");
-    if (navAdminBadge) navAdminBadge.textContent = "Khóa";
-    if (dropdownAdminLink) dropdownAdminLink.classList.add("hidden");
+    // Ẩn hoàn toàn các chức năng quản trị và nhân viên khi chưa đăng nhập
+    if (navStaffLink) { navStaffLink.classList.add("hidden"); navStaffLink.style.display = "none"; }
+    if (navAdminLink) { navAdminLink.classList.add("hidden"); navAdminLink.style.display = "none"; }
+    if (dropdownStaffLink) { dropdownStaffLink.classList.add("hidden"); dropdownStaffLink.style.display = "none"; }
+    if (dropdownAdminLink) { dropdownAdminLink.classList.add("hidden"); dropdownAdminLink.style.display = "none"; }
     return;
   }
 
@@ -163,11 +168,12 @@ function updateAuthUI() {
       label: `CGV ${tier} (${points} P)`,
       badgeClass: tier === "VVIP" ? "bg-purple-950 text-purple-300 border-purple-800" : tier === "VIP" ? "bg-yellow-950 text-cgv-gold border-yellow-800" : "bg-red-950 text-red-300 border-red-800",
       icon: "fa-crown",
+      canStaff: false,
       canAdmin: false
     },
-    STAFF: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canAdmin: true },
-    MANAGER: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canAdmin: true },
-    ADMIN: { label: "Quản trị viên toàn quyền", badgeClass: "bg-red-950 text-red-400 border-red-800", icon: "fa-shield", canAdmin: true }
+    STAFF: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canStaff: true, canAdmin: false },
+    MANAGER: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canStaff: true, canAdmin: false },
+    ADMIN: { label: "Quản trị viên", badgeClass: "bg-red-950 text-red-400 border-red-800", icon: "fa-shield", canStaff: true, canAdmin: true }
   };
 
   const config = roleConfigs[currentUser.role] || roleConfigs.CUSTOMER;
@@ -177,23 +183,57 @@ function updateAuthUI() {
     dropdownRoleBadge.className = `px-2 py-0.5 rounded text-[10px] font-bold border ${config.badgeClass}`;
   }
 
-  if (config.canAdmin) {
-    if (navAdminBadge) {
-      navAdminBadge.textContent = currentUser.role;
-      navAdminBadge.className = "ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-red-950 text-red-400 border border-red-800 font-bold";
+  // PHÂN QUYỀN ẨN/HIỆN CHỨC NĂNG THEO VAI TRÒ CHÍNH XÁC:
+  // 1. Phân hệ Nghiệp vụ Nhân viên rạp (STAFF & ADMIN)
+  if (config.canStaff) {
+    if (navStaffLink) {
+      navStaffLink.classList.remove("hidden");
+      navStaffLink.style.display = "inline-flex";
     }
-    if (dropdownAdminLink) dropdownAdminLink.classList.remove("hidden");
+    if (dropdownStaffLink) {
+      dropdownStaffLink.classList.remove("hidden");
+      dropdownStaffLink.style.display = "flex";
+    }
   } else {
-    if (navAdminBadge) {
-      navAdminBadge.textContent = "Yêu cầu quyền";
-      navAdminBadge.className = "ml-1.5 px-1.5 py-0.5 rounded text-[9px] bg-gray-800 text-gray-400 border border-gray-700 font-bold";
+    if (navStaffLink) {
+      navStaffLink.classList.add("hidden");
+      navStaffLink.style.display = "none";
     }
-    if (dropdownAdminLink) dropdownAdminLink.classList.add("hidden");
+    if (dropdownStaffLink) {
+      dropdownStaffLink.classList.add("hidden");
+      dropdownStaffLink.style.display = "none";
+    }
+  }
+
+  // 2. Phân hệ Quản trị Hệ thống (CHỈ ADMIN)
+  if (config.canAdmin) {
+    if (navAdminLink) {
+      navAdminLink.classList.remove("hidden");
+      navAdminLink.style.display = "inline-flex";
+    }
+    if (dropdownAdminLink) {
+      dropdownAdminLink.classList.remove("hidden");
+      dropdownAdminLink.style.display = "flex";
+    }
+  } else {
+    if (navAdminLink) {
+      navAdminLink.classList.add("hidden");
+      navAdminLink.style.display = "none";
+    }
+    if (dropdownAdminLink) {
+      dropdownAdminLink.classList.add("hidden");
+      dropdownAdminLink.style.display = "none";
+    }
   }
 
   const adminTag = document.getElementById("admin-current-user-tag");
   if (adminTag) {
     adminTag.innerHTML = `<i class="fa-solid fa-user-shield text-cgv-red mr-1.5"></i>${currentUser.name} (${currentUser.role})`;
+  }
+
+  const staffTag = document.getElementById("staff-user-tag");
+  if (staffTag) {
+    staffTag.innerHTML = `<i class="fa-solid fa-user-check mr-2 text-green-400"></i>${currentUser.name} (${currentUser.role})`;
   }
 }
 
@@ -250,8 +290,14 @@ async function handleLoginSubmit(event) {
       closeAuthModal();
       updateAuthUI();
       showToast(json.message || "Đăng nhập thành công!", "success");
-      if (["ADMIN", "MANAGER", "STAFF"].includes(currentUser.role)) {
-        showToast(`Chào mừng Quản trị viên ${currentUser.name}. Bạn có thể vào tab Quản Trị Admin.`, "info");
+      if (currentUser.role === "STAFF") {
+        showToast(`Chào mừng Nhân viên rạp ${currentUser.name}. Bạn đang ở trang Nghiệp vụ Soát vé.`, "info");
+        switchView("staff");
+      } else if (currentUser.role === "ADMIN") {
+        showToast(`Chào mừng Quản trị viên ${currentUser.name}. Bạn có toàn quyền quản trị hệ thống.`, "info");
+        switchView("admin");
+      } else {
+        switchView("home");
       }
     } else {
       showToast(json.message || "Đăng nhập thất bại!", "error");
@@ -307,7 +353,15 @@ async function quickLogin(email, password, notify = true) {
       localStorage.setItem("aiCinemaUser", JSON.stringify(currentUser));
       closeAuthModal();
       updateAuthUI();
-      if (notify) showToast(`Đã chuyển sang tài khoản: ${currentUser.name} (${currentUser.role})`, "success");
+      if (currentUser.role === "STAFF") {
+        switchView("staff");
+      } else if (currentUser.role === "ADMIN") {
+        switchView("admin");
+      } else {
+        switchView("home");
+      }
+      const roleTitle = currentUser.role === "ADMIN" ? "Quản trị viên" : currentUser.role === "STAFF" ? "Nhân viên rạp" : "Khách hàng";
+      if (notify) showToast(`Đã chuyển sang tài khoản: ${currentUser.name} (${roleTitle})`, "success");
     }
   } catch (err) {
     console.error("Lỗi Quick Login:", err);
@@ -352,64 +406,94 @@ document.addEventListener("click", (e) => {
   }
 });
 
-function handleAdminNavClick() {
-  if (!currentUser) {
-    showToast("Vui lòng đăng nhập với tài khoản Quản trị viên (Admin) để truy cập!", "warning");
-    openAuthModal("login");
-    return;
-  }
-
-  if (["ADMIN", "MANAGER", "STAFF"].includes(currentUser.role)) {
-    switchView("admin");
-  } else {
-    showToast(`Tài khoản ${currentUser.name} là Khách hàng, không có quyền truy cập khu vực Quản trị Admin! Vui lòng đăng nhập bằng tài khoản Quản trị viên.`, "error");
-    openAuthModal("login");
-  }
-}
-
-// ==================== VIEW ROUTING ==================== //
+// ==================== VIEW ROUTING (3 PHÂN HỆ TRANG RIÊNG BIỆT) ==================== //
 
 function switchView(viewName) {
   const homeView = document.getElementById("home-view");
+  const staffView = document.getElementById("staff-view");
   const adminView = document.getElementById("admin-view");
   const aiLabView = document.getElementById("ai-lab-view");
   const accountView = document.getElementById("account-view");
 
-  if (viewName === "admin") {
-    if (!currentUser || !["ADMIN", "MANAGER", "STAFF"].includes(currentUser.role)) {
-      handleAdminNavClick();
+  // 1. Phân hệ Nghiệp vụ Nhân viên rạp (Chỉ STAFF & ADMIN)
+  if (viewName === "staff") {
+    if (!currentUser || !["STAFF", "ADMIN", "MANAGER"].includes(currentUser.role)) {
+      showToast("Bạn không có quyền truy cập trang Nghiệp Vụ Nhân Viên!", "error");
+      switchView("home");
       return;
     }
-    homeView.classList.add("hidden");
-    aiLabView.classList.add("hidden");
-    accountView.classList.add("hidden");
-    adminView.classList.remove("hidden");
+    if (homeView) homeView.classList.add("hidden");
+    if (adminView) adminView.classList.add("hidden");
+    if (aiLabView) aiLabView.classList.add("hidden");
+    if (accountView) accountView.classList.add("hidden");
+    if (staffView) staffView.classList.remove("hidden");
+    fetchStaffBookings();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  // 2. Phân hệ Quản trị Hệ thống (CHỈ QUẢN TRỊ VIÊN ADMIN)
+  if (viewName === "admin") {
+    if (!currentUser || currentUser.role !== "ADMIN") {
+      showToast("Chức năng Quản Trị Hệ Thống chỉ dành riêng cho Quản trị viên (ADMIN)!", "error");
+      switchView("home");
+      return;
+    }
+    if (homeView) homeView.classList.add("hidden");
+    if (staffView) staffView.classList.add("hidden");
+    if (aiLabView) aiLabView.classList.add("hidden");
+    if (accountView) accountView.classList.add("hidden");
+    if (adminView) adminView.classList.remove("hidden");
+    const chatbotEl = document.getElementById("chatbot-container");
+    if (chatbotEl) chatbotEl.classList.add("hidden");
     updateAdminCapabilities();
     loadAdminDashboard();
-    // Nếu là Nhân viên rạp: mặc định mở tab Quản lý & Soát vé (bookings); Nếu là Quản trị viên: mở tab Quản lý Phim
-    if (currentUser.role === "STAFF" || currentUser.role === "MANAGER") {
-      switchAdminTab("bookings");
-    } else {
-      switchAdminTab("movies");
-    }
-  } else if (viewName === "ai-lab") {
-    homeView.classList.add("hidden");
-    adminView.classList.add("hidden");
-    accountView.classList.add("hidden");
-    aiLabView.classList.remove("hidden");
-    loadRecommendationLab();
-  } else if (viewName === "account") {
-    homeView.classList.add("hidden");
-    adminView.classList.add("hidden");
-    aiLabView.classList.add("hidden");
-    accountView.classList.remove("hidden");
-    loadAccountView();
-  } else {
-    adminView.classList.add("hidden");
-    aiLabView.classList.add("hidden");
-    accountView.classList.add("hidden");
-    homeView.classList.remove("hidden");
+    switchAdminTab("movies");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
   }
+
+  // 3. Phân hệ AI Studio
+  if (viewName === "ai-lab") {
+    if (homeView) homeView.classList.add("hidden");
+    if (staffView) staffView.classList.add("hidden");
+    if (adminView) adminView.classList.add("hidden");
+    if (accountView) accountView.classList.add("hidden");
+    if (aiLabView) aiLabView.classList.remove("hidden");
+    loadRecommendationLab();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  // 4. Phân hệ Tài khoản cá nhân & Thẻ thành viên
+  if (viewName === "account") {
+    if (homeView) homeView.classList.add("hidden");
+    if (staffView) staffView.classList.add("hidden");
+    if (adminView) adminView.classList.add("hidden");
+    if (aiLabView) aiLabView.classList.add("hidden");
+    if (accountView) accountView.classList.remove("hidden");
+    loadAccountView();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  // Ẩn Floating Chatbot khi vào trang Quản trị Admin để giao diện thông thoáng, không che nội dung
+  const chatbotEl = document.getElementById("chatbot-container");
+  if (chatbotEl) {
+    if (viewName === "admin") {
+      chatbotEl.classList.add("hidden");
+    } else {
+      chatbotEl.classList.remove("hidden");
+    }
+  }
+
+  // 5. Phân hệ Trang chủ Khách hàng (Mặc định)
+  if (staffView) staffView.classList.add("hidden");
+  if (adminView) adminView.classList.add("hidden");
+  if (aiLabView) aiLabView.classList.add("hidden");
+  if (accountView) accountView.classList.add("hidden");
+  if (homeView) homeView.classList.remove("hidden");
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function updateAdminCapabilities() {
@@ -967,13 +1051,15 @@ function renderAdminMoviesTable(moviesList, pagination) {
   moviesList.forEach(m => {
     const tr = document.createElement("tr");
     tr.className = "border-t border-gray-800 hover:bg-gray-800/40 transition";
+    const duration = m.durationMinutes || m.duration || 120;
+    const movieId = m.id || "mov-00";
     tr.innerHTML = `
       <td class="p-4">
         <div class="flex items-center space-x-3">
-          <img src="${m.posterUrl}" alt="${m.title}" class="w-10 h-14 rounded-lg object-cover shadow">
+          <img src="${m.posterUrl}" alt="${m.title}" class="w-10 h-14 rounded-lg object-cover shadow flex-shrink-0">
           <div>
-            <b class="text-white text-xs block">${m.title}</b>
-            <span class="text-[10px] text-gray-500 font-mono">${m.id} • ${m.durationMinutes}p</span>
+            <b class="text-white text-xs block font-bold">${m.title}</b>
+            <span class="text-[10px] text-gray-500 font-mono">${movieId} • ${duration}p</span>
           </div>
         </div>
       </td>
@@ -1634,6 +1720,202 @@ async function confirmCheckInTicket(code) {
       fetchAdminBookings();
     } else {
       showToast(json.message || "Không thể soát vé.", "error");
+    }
+  } catch (err) {
+    showToast("Lỗi kết nối khi gửi yêu cầu soát vé.", "error");
+  }
+}
+
+// ==================== PHÂN HỆ NGHIỆP VỤ NHÂN VIÊN RẠP (STAFF POS & SOÁT VÉ) ==================== //
+
+let staffBookingPage = 1;
+let staffBookingLimit = 10;
+let staffBookingSearch = "";
+let staffBookingStatus = "ALL";
+let staffBookingDate = "";
+let staffBookingSearchTimeout = null;
+
+async function fetchStaffBookings() {
+  const tbody = document.getElementById("staff-bookings-table-body");
+  if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-400"><i class="fa-solid fa-spinner animate-spin mr-2 text-green-400"></i>Đang tải danh sách vé...</td></tr>`;
+
+  try {
+    const query = new URLSearchParams({
+      page: staffBookingPage,
+      limit: staffBookingLimit,
+      search: staffBookingSearch,
+      status: staffBookingStatus,
+      date: staffBookingDate
+    });
+    const res = await apiFetch(`/admin/bookings?${query.toString()}`);
+    const json = await res.json();
+
+    if (json.status === "SUCCESS") {
+      renderStaffBookingsTable(json.data, json.pagination, json.summary);
+    } else if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-red-400">${json.message || "Không thể tải danh sách vé."}</td></tr>`;
+    }
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-red-400">Không thể kết nối máy chủ.</td></tr>`;
+  }
+}
+
+function renderStaffBookingsTable(bookingsList, pagination, summary) {
+  const tbody = document.getElementById("staff-bookings-table-body");
+  const infoEl = document.getElementById("staff-bookings-pagination-info");
+  const controlsEl = document.getElementById("staff-bookings-pagination-controls");
+  const ticketsEl = document.getElementById("staff-booking-total-tickets");
+  const revenueEl = document.getElementById("staff-booking-total-revenue");
+
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  if (ticketsEl) ticketsEl.textContent = Number(summary?.totalTickets || 0).toLocaleString("vi-VN");
+  if (revenueEl) revenueEl.textContent = `${Number(summary?.totalRevenue || 0).toLocaleString("vi-VN")} đ`;
+
+  if (!bookingsList || bookingsList.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-400">Chưa có vé nào phù hợp.</td></tr>`;
+    if (infoEl) infoEl.textContent = "0 vé";
+    if (controlsEl) controlsEl.innerHTML = "";
+    return;
+  }
+
+  bookingsList.forEach(booking => {
+    const tr = document.createElement("tr");
+    tr.className = "border-t border-gray-800 hover:bg-gray-800/40 transition";
+    const bookedAt = booking.bookedAt ? new Date(booking.bookedAt).toLocaleString("vi-VN") : "-";
+    const customer = booking.customer || {};
+    const movie = booking.movie || {};
+    const showtime = booking.showtime || {};
+
+    let statusBadge = "";
+    let actionBtn = "";
+
+    if (booking.status === "CHECKED_IN") {
+      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold border bg-teal-950 text-teal-300 border-teal-800"><i class="fa-solid fa-check mr-1"></i>Đã vào rạp</span>`;
+      actionBtn = `<span class="text-teal-400 text-[11px] font-semibold"><i class="fa-solid fa-circle-check mr-1"></i>Đã soát vé</span>`;
+    } else if (booking.status === "PAID") {
+      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold border bg-green-950 text-green-400 border-green-800">Đã thanh toán</span>`;
+      actionBtn = `<button onclick="confirmCheckInTicket('${booking.bookingCode}')" class="px-2.5 py-1 rounded bg-green-700 hover:bg-green-600 text-white text-[10px] font-bold transition inline-flex items-center gap-1 shadow"><i class="fa-solid fa-qrcode"></i> Soát vé</button>`;
+    } else {
+      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold border bg-red-950 text-red-400 border-red-800">${booking.status}</span>`;
+      actionBtn = `<span class="text-gray-500 text-[10px]">Không khả dụng</span>`;
+    }
+
+    tr.innerHTML = `
+      <td class="p-4">
+        <b class="text-cgv-red font-mono text-xs block">${booking.bookingCode}</b>
+        <span class="text-[10px] text-gray-500">${bookedAt}</span>
+      </td>
+      <td class="p-4">
+        <b class="text-white text-xs block">${customer.name || booking.userId}</b>
+        <span class="text-[10px] text-gray-500">${customer.email || "-"}</span>
+      </td>
+      <td class="p-4">
+        <b class="text-white text-xs block">${movie.title || booking.movieId}</b>
+        <span class="text-[10px] text-gray-400">${showtime.startTime || "-"}</span>
+      </td>
+      <td class="p-4 text-gray-300">
+        <span class="block text-white">${booking.room?.name || "-"}</span>
+        <span class="text-[10px] text-cgv-gold">${(booking.seats || []).join(", ")}</span>
+      </td>
+      <td class="p-4 text-cgv-gold font-bold">${Number(booking.total || 0).toLocaleString("vi-VN")} đ</td>
+      <td class="p-4">${statusBadge}</td>
+      <td class="p-4 text-center">${actionBtn}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  const { total, page, totalPages } = pagination;
+  if (infoEl) infoEl.textContent = `Trang ${page} / ${totalPages} (Tổng ${total} vé)`;
+  if (controlsEl) {
+    controlsEl.innerHTML = `
+      <button onclick="goToStaffBookingPage(${page - 1})" ${page <= 1 ? "disabled" : ""} class="px-2.5 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+        <i class="fa-solid fa-chevron-left"></i>
+      </button>
+      ${Array.from({ length: totalPages }, (_, i) => i + 1).map(p => `
+        <button onclick="goToStaffBookingPage(${p})" class="w-8 h-8 rounded-lg text-xs font-bold transition ${p === page ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}">${p}</button>
+      `).join("")}
+      <button onclick="goToStaffBookingPage(${page + 1})" ${page >= totalPages ? "disabled" : ""} class="px-2.5 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+        <i class="fa-solid fa-chevron-right"></i>
+      </button>
+    `;
+  }
+}
+
+function handleStaffBookingSearch(value) {
+  clearTimeout(staffBookingSearchTimeout);
+  staffBookingSearchTimeout = setTimeout(() => {
+    staffBookingSearch = value.trim();
+    staffBookingPage = 1;
+    fetchStaffBookings();
+  }, 350);
+}
+
+function handleStaffBookingStatusFilter(value) {
+  staffBookingStatus = value;
+  staffBookingPage = 1;
+  fetchStaffBookings();
+}
+
+function handleStaffBookingDateFilter(value) {
+  staffBookingDate = value;
+  staffBookingPage = 1;
+  fetchStaffBookings();
+}
+
+function goToStaffBookingPage(page) {
+  staffBookingPage = page;
+  fetchStaffBookings();
+}
+
+async function handleStaffQuickCheckIn() {
+  const input = document.getElementById("staff-checkin-input");
+  const resultBox = document.getElementById("staff-checkin-result");
+  const code = (input ? input.value : "").trim();
+
+  if (!code) {
+    showToast("Vui lòng nhập mã vé hoặc mã QR cần soát vé.", "warning");
+    if (input) input.focus();
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`/bookings/check-in`, {
+      method: "POST",
+      body: JSON.stringify({ code })
+    });
+    const json = await res.json();
+
+    if (resultBox) {
+      resultBox.classList.remove("hidden");
+      if (json.status === "SUCCESS") {
+        resultBox.className = "mt-5 p-4 rounded-xl bg-green-950/90 border border-green-600 text-green-200 text-xs";
+        resultBox.innerHTML = `
+          <div class="flex items-center gap-2 font-bold text-sm text-green-300 mb-2">
+            <i class="fa-solid fa-circle-check text-base"></i>
+            <span>${json.message}</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-gray-300 pt-2 border-t border-green-800">
+            <div><span class="text-gray-400 block text-[10px]">Phim:</span> <b>${json.data.movieTitle}</b></div>
+            <div><span class="text-gray-400 block text-[10px]">Phòng:</span> <b>${json.data.roomName}</b></div>
+            <div><span class="text-gray-400 block text-[10px]">Ghế:</span> <b class="text-cgv-gold">${json.data.seats.join(", ")}</b></div>
+            <div><span class="text-gray-400 block text-[10px]">Giờ chiếu:</span> <b>${json.data.showtimeStart ? new Date(json.data.showtimeStart).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'}) : "-"}</b></div>
+          </div>
+        `;
+        showToast(json.message, "success");
+        if (input) input.value = "";
+        fetchStaffBookings();
+        fetchAdminBookings();
+      } else {
+        resultBox.className = "mt-5 p-4 rounded-xl bg-red-950/90 border border-red-700 text-red-200 text-xs";
+        resultBox.innerHTML = `
+          <div class="flex items-center gap-2 font-bold text-sm text-red-300">
+            <i class="fa-solid fa-circle-xmark text-base"></i>
+            <span>${json.message || "Không thể soát vé!"}</span>
+          </div>
+        `;
+        showToast(json.message || "Soát vé thất bại.", "error");
+      }
     }
   } catch (err) {
     showToast("Lỗi kết nối khi gửi yêu cầu soát vé.", "error");
