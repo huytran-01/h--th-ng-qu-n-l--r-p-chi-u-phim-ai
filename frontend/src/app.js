@@ -165,8 +165,8 @@ function updateAuthUI() {
       icon: "fa-crown",
       canAdmin: false
     },
-    STAFF: { label: "Nhân viên quầy POS", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canAdmin: true },
-    MANAGER: { label: "Quản lý rạp CGV", badgeClass: "bg-blue-950 text-blue-400 border-blue-800", icon: "fa-user-tie", canAdmin: true },
+    STAFF: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canAdmin: true },
+    MANAGER: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canAdmin: true },
     ADMIN: { label: "Quản trị viên toàn quyền", badgeClass: "bg-red-950 text-red-400 border-red-800", icon: "fa-shield", canAdmin: true }
   };
 
@@ -386,7 +386,12 @@ function switchView(viewName) {
     adminView.classList.remove("hidden");
     updateAdminCapabilities();
     loadAdminDashboard();
-    switchAdminTab("movies");
+    // Nếu là Nhân viên rạp: mặc định mở tab Quản lý & Soát vé (bookings); Nếu là Quản trị viên: mở tab Quản lý Phim
+    if (currentUser.role === "STAFF" || currentUser.role === "MANAGER") {
+      switchAdminTab("bookings");
+    } else {
+      switchAdminTab("movies");
+    }
   } else if (viewName === "ai-lab") {
     homeView.classList.add("hidden");
     adminView.classList.add("hidden");
@@ -408,13 +413,21 @@ function switchView(viewName) {
 }
 
 function updateAdminCapabilities() {
-  const canManageUsers = currentUser && currentUser.role === "ADMIN";
+  const isAdmin = currentUser && currentUser.role === "ADMIN";
   const usersTab = document.getElementById("btn-admin-tab-users");
   const usersPane = document.getElementById("admin-tab-users");
+  const moviesTab = document.getElementById("btn-admin-tab-movies");
+  const showtimesTab = document.getElementById("btn-admin-tab-showtimes");
+  const forecastTab = document.getElementById("btn-admin-tab-forecast");
 
-  if (usersTab) usersTab.classList.toggle("hidden", !canManageUsers);
-  if (usersPane && !canManageUsers && currentAdminTab === "users") {
-    switchAdminTab("movies");
+  // Với Nhân viên rạp: tập trung soát vé và tra cứu vé
+  if (usersTab) usersTab.classList.toggle("hidden", !isAdmin);
+  if (moviesTab) moviesTab.classList.toggle("hidden", !isAdmin);
+  if (showtimesTab) showtimesTab.classList.toggle("hidden", !isAdmin);
+  if (forecastTab) forecastTab.classList.toggle("hidden", !isAdmin);
+
+  if (!isAdmin && currentAdminTab !== "bookings") {
+    switchAdminTab("bookings");
   }
 }
 
@@ -863,8 +876,8 @@ async function saveAccountProfile() {
 // ==================== ADMIN WORKSPACE (PHÂN TRANG RIÊNG CHO ADMIN) ==================== //
 
 function switchAdminTab(tabName) {
-  if (tabName === "users" && (!currentUser || currentUser.role !== "ADMIN")) {
-    showToast("Chỉ ADMIN mới có quyền quản lý người dùng và RBAC.", "warning");
+  if (tabName !== "bookings" && (!currentUser || currentUser.role !== "ADMIN")) {
+    showToast("Tài khoản Nhân viên rạp chỉ có quyền soát vé và tra cứu lịch sử vé. Các chức năng danh mục và báo cáo dành riêng cho Quản trị viên.", "warning");
     return;
   }
   currentAdminTab = tabName;
@@ -1407,8 +1420,7 @@ function renderAdminUsersTable(usersList, pagination) {
       <td class="p-4">
         <select onchange="changeUserRole('${u.id}', this.value)" class="bg-gray-900 border border-gray-700 text-xs rounded-lg px-2.5 py-1 text-red-400 font-bold focus:outline-none">
           <option value="CUSTOMER" ${u.role === "CUSTOMER" ? "selected" : ""}>CUSTOMER (Khách hàng)</option>
-          <option value="STAFF" ${u.role === "STAFF" ? "selected" : ""}>STAFF (Nhân viên POS)</option>
-          <option value="MANAGER" ${u.role === "MANAGER" ? "selected" : ""}>MANAGER (Quản lý)</option>
+          <option value="STAFF" ${u.role === "STAFF" || u.role === "MANAGER" ? "selected" : ""}>STAFF (Nhân viên rạp)</option>
           <option value="ADMIN" ${u.role === "ADMIN" ? "selected" : ""}>ADMIN (Quản trị viên)</option>
         </select>
       </td>
@@ -1514,7 +1526,7 @@ function renderAdminBookingsTable(bookingsList, pagination, summary) {
   if (revenueEl) revenueEl.textContent = `${Number(summary?.totalRevenue || 0).toLocaleString("vi-VN")} đ`;
 
   if (!bookingsList || bookingsList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-gray-400">Chưa có vé nào phù hợp.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-400">Chưa có vé nào phù hợp.</td></tr>`;
     if (infoEl) infoEl.textContent = "0 vé";
     if (controlsEl) controlsEl.innerHTML = "";
     return;
@@ -1527,9 +1539,21 @@ function renderAdminBookingsTable(bookingsList, pagination, summary) {
     const customer = booking.customer || {};
     const movie = booking.movie || {};
     const showtime = booking.showtime || {};
-    const statusClass = booking.status === "PAID"
-      ? "bg-green-950 text-green-400 border-green-800"
-      : "bg-red-950 text-red-400 border-red-800";
+
+    let statusBadge = "";
+    let actionBtn = "";
+
+    if (booking.status === "CHECKED_IN") {
+      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold border bg-teal-950 text-teal-300 border-teal-800"><i class="fa-solid fa-check mr-1"></i>Đã vào rạp</span>`;
+      actionBtn = `<span class="text-teal-400 text-[11px] font-semibold"><i class="fa-solid fa-circle-check mr-1"></i>Đã soát vé</span>`;
+    } else if (booking.status === "PAID") {
+      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold border bg-green-950 text-green-400 border-green-800">Đã thanh toán</span>`;
+      actionBtn = `<button onclick="confirmCheckInTicket('${booking.bookingCode}')" class="px-2.5 py-1 rounded bg-green-700 hover:bg-green-600 text-white text-[10px] font-bold transition inline-flex items-center gap-1 shadow"><i class="fa-solid fa-qrcode"></i> Soát vé</button>`;
+    } else {
+      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold border bg-red-950 text-red-400 border-red-800">${booking.status}</span>`;
+      actionBtn = `<span class="text-gray-500 text-[10px]">Không khả dụng</span>`;
+    }
+
     tr.innerHTML = `
       <td class="p-4">
         <b class="text-cgv-red font-mono text-xs block">${booking.bookingCode}</b>
@@ -1548,7 +1572,8 @@ function renderAdminBookingsTable(bookingsList, pagination, summary) {
         <span class="text-[10px] text-cgv-gold">${(booking.seats || []).join(", ")}</span>
       </td>
       <td class="p-4 text-cgv-gold font-bold">${Number(booking.total || 0).toLocaleString("vi-VN")} đ</td>
-      <td class="p-4"><span class="px-2 py-0.5 rounded text-[10px] font-bold border ${statusClass}">${booking.status}</span></td>
+      <td class="p-4">${statusBadge}</td>
+      <td class="p-4 text-center">${actionBtn}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -1594,6 +1619,51 @@ function handleBookingDateFilter(value) {
 function goToBookingPage(page) {
   bookingPage = page;
   fetchAdminBookings();
+}
+
+async function confirmCheckInTicket(code) {
+  if (!confirm(`Xác nhận soát vé cho mã ${code}? Khách sẽ được check-in vào phòng chiếu.`)) return;
+  try {
+    const res = await apiFetch(`/bookings/check-in`, {
+      method: "POST",
+      body: JSON.stringify({ code })
+    });
+    const json = await res.json();
+    if (json.status === "SUCCESS") {
+      showToast(json.message, "success");
+      fetchAdminBookings();
+    } else {
+      showToast(json.message || "Không thể soát vé.", "error");
+    }
+  } catch (err) {
+    showToast("Lỗi kết nối khi gửi yêu cầu soát vé.", "error");
+  }
+}
+
+async function handleQuickCheckIn() {
+  const input = document.getElementById("quick-checkin-code");
+  const code = (input ? input.value : "").trim();
+  if (!code) {
+    showToast("Vui lòng nhập mã vé hoặc mã QR cần soát vé.", "warning");
+    if (input) input.focus();
+    return;
+  }
+  try {
+    const res = await apiFetch(`/bookings/check-in`, {
+      method: "POST",
+      body: JSON.stringify({ code })
+    });
+    const json = await res.json();
+    if (json.status === "SUCCESS") {
+      showToast(json.message, "success");
+      if (input) input.value = "";
+      fetchAdminBookings();
+    } else {
+      showToast(json.message || "Soát vé thất bại.", "error");
+    }
+  } catch (err) {
+    showToast("Lỗi kết nối khi gửi yêu cầu soát vé.", "error");
+  }
 }
 
 function openUserModal(mode = "create", userData = null) {
