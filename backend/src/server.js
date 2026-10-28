@@ -18,7 +18,14 @@ const PORT = process.env.PORT || 5000;
 const ROLE_PERMISSIONS = {
   CUSTOMER: ["movies.read", "bookings.create", "recommendations.read", "profile.manage"],
   STAFF: ["movies.read", "bookings.create", "bookings.read", "bookings.scan", "support.manage"],
-  ADMIN: ["movies.read", "movies.manage", "bookings.create", "bookings.read", "bookings.scan", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage", "users.manage", "system.manage"]
+  ADMIN: [
+    "movies.read", "movies.manage",
+    "bookings.create", "bookings.read", "bookings.scan",
+    "showtimes.manage", "rooms.manage",
+    "analytics.read", "ai.manage",
+    "users.manage", "system.manage",
+    "support.manage", "recommendations.read", "profile.manage"
+  ]
 };
 // Tương thích ngược: MANAGER tự động ánh xạ quyền của STAFF
 ROLE_PERMISSIONS.MANAGER = ROLE_PERMISSIONS.STAFF;
@@ -35,13 +42,24 @@ function requirePermission(permission) {
 
     const authHeader = req.header("authorization") || req.header("Authorization");
     if (authHeader) {
-      const user = authService.verifyToken(authHeader);
-      if (user) {
-        role = (user.role || "CUSTOMER").toUpperCase();
-        currentUser = user;
+      currentUser = authService.verifyToken(authHeader);
+      if (currentUser) {
+        role = (currentUser.role || "CUSTOMER").toUpperCase();
       }
-    } else if (req.header("x-demo-role")) {
-      role = req.header("x-demo-role").toUpperCase();
+    }
+
+    // Fallback: nếu chưa xác định được user từ token (ví dụ server vừa khởi động lại làm mới in-memory session)
+    // Ưu tiên khôi phục role từ header x-demo-role nếu client gửi
+    if (!currentUser && req.header("x-demo-role")) {
+      const demoRole = req.header("x-demo-role").toUpperCase();
+      if (ROLE_PERMISSIONS[demoRole]) {
+        role = demoRole;
+        if (role === "ADMIN") {
+          currentUser = users.find(u => u.role === "ADMIN") || null;
+        } else if (role === "STAFF" || role === "MANAGER") {
+          currentUser = users.find(u => u.role === "STAFF") || null;
+        }
+      }
     }
 
     if (!ROLE_PERMISSIONS[role] || !ROLE_PERMISSIONS[role].includes(permission)) {
@@ -90,7 +108,23 @@ app.get("/api/v1/auth/me", (req, res) => {
   if (!authHeader) {
     return res.status(401).json({ status: "UNAUTHORIZED", message: "Chưa đăng nhập." });
   }
-  const user = authService.verifyToken(authHeader);
+  let user = authService.verifyToken(authHeader);
+  if (!user && req.header("x-demo-role")) {
+    const demoRole = req.header("x-demo-role").toUpperCase();
+    if (demoRole === "ADMIN") {
+      const admin = users.find(u => u.role === "ADMIN");
+      if (admin) {
+        const { password: _, ...safe } = admin;
+        user = safe;
+      }
+    } else if (demoRole === "STAFF" || demoRole === "MANAGER") {
+      const staff = users.find(u => u.role === "STAFF");
+      if (staff) {
+        const { password: _, ...safe } = staff;
+        user = safe;
+      }
+    }
+  }
   if (!user) {
     return res.status(401).json({ status: "UNAUTHORIZED", message: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn." });
   }

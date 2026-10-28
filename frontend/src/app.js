@@ -94,7 +94,7 @@ function getAuthHeaders() {
     headers["Authorization"] = `Bearer ${authToken}`;
   }
   if (currentUser && currentUser.role) {
-    headers["x-demo-role"] = currentUser.role;
+    headers["x-demo-role"] = String(currentUser.role).toUpperCase();
   }
   return headers;
 }

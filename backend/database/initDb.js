@@ -66,7 +66,7 @@ async function initDatabase() {
       await dbConn.execute(
         `INSERT INTO cinemas (id, name, address, city) VALUES (?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE name=VALUES(name), address=VALUES(address), city=VALUES(city);`,
-        [c.id, c.name, c.address, c.city]
+        [c.id, c.name, c.address, c.city || c.region || "TP. Hồ Chí Minh"]
       );
     }
 
@@ -76,7 +76,7 @@ async function initDatabase() {
       await dbConn.execute(
         `INSERT INTO rooms (id, cinema_id, name, format, total_seats) VALUES (?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE name=VALUES(name), format=VALUES(format), total_seats=VALUES(total_seats);`,
-        [r.id, r.cinemaId, r.name, r.format, r.totalSeats || 48]
+        [r.id, r.cinemaId || "cin-01", r.name, r.format || r.type || "2D", r.totalSeats || 48]
       );
 
       // Thêm 48 ghế chuẩn cho phòng này
@@ -85,7 +85,7 @@ async function initDatabase() {
           `INSERT INTO seats (id, room_id, seat_row, seat_number, seat_type, price_rate)
            VALUES (?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE seat_type=VALUES(seat_type), price_rate=VALUES(price_rate);`,
-          [s.id, r.id, s.row, s.number, s.type, s.priceRate]
+          [s.id, r.id, s.row, s.number, s.type || "STANDARD", s.priceRate || 1.0]
         );
       }
     }
@@ -103,7 +103,7 @@ async function initDatabase() {
           m.id,
           m.title,
           m.originalTitle || null,
-          m.status,
+          m.status || "NOW_SHOWING",
           m.durationMinutes || 120,
           m.releaseDate || null,
           m.ageRating || "T13",
@@ -130,7 +130,7 @@ async function initDatabase() {
         `INSERT INTO showtimes (id, movie_id, room_id, start_time, end_time, price, format)
          VALUES (?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE start_time=VALUES(start_time), price=VALUES(price);`,
-        [st.id, st.movieId, st.roomId, startTime, endTime, st.price, st.format]
+        [st.id, st.movieId, st.roomId, startTime, endTime, st.price || 110000, st.format || "2D"]
       );
     }
 
@@ -141,7 +141,7 @@ async function initDatabase() {
         `INSERT INTO combos (id, name, description, price, image_url, status)
          VALUES (?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE name=VALUES(name), price=VALUES(price);`,
-        [cb.id, cb.name, cb.description, cb.price, cb.imageUrl, cb.status || "ACTIVE"]
+        [cb.id, cb.name, cb.description || cb.desc || "", cb.price || 0, cb.imageUrl || cb.img || null, cb.status || "ACTIVE"]
       );
     }
 
@@ -159,7 +159,7 @@ async function initDatabase() {
           u.email,
           u.password,
           u.phone || null,
-          u.role,
+          u.role || "CUSTOMER",
           u.memberCardNumber || null,
           u.memberTier || "MEMBER",
           u.points || 0,
@@ -180,7 +180,7 @@ async function initDatabase() {
          ON DUPLICATE KEY UPDATE status=VALUES(status);`,
         [
           b.bookingCode,
-          b.qrToken,
+          b.qrToken || b.bookingCode,
           b.userId,
           b.movieId,
           b.showtimeId,

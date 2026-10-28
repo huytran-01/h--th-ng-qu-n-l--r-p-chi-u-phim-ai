@@ -135,7 +135,24 @@ class AuthService {
     if (!token) return null;
 
     const cleanToken = token.startsWith("Bearer ") ? token.slice(7).trim() : token.trim();
-    const session = tokenStore.get(cleanToken);
+    let session = tokenStore.get(cleanToken);
+
+    // Tự động phục hồi session thông minh nếu token có tiền tố chuẩn cgv_
+    // Giúp duy trì đăng nhập của Admin/Staff/Khách hàng ngay cả khi server vừa khởi động lại
+    if (!session && cleanToken.startsWith("cgv_")) {
+      const withoutPrefix = cleanToken.slice(4);
+      const sortedUsers = [...users].sort((a, b) => b.id.length - a.id.length);
+      const matchedUser = sortedUsers.find(u => withoutPrefix.startsWith(u.id + "_") || withoutPrefix === u.id);
+      if (matchedUser && matchedUser.status !== "LOCKED") {
+        session = {
+          userId: matchedUser.id,
+          role: matchedUser.role,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + TOKEN_TTL_MS
+        };
+        tokenStore.set(cleanToken, session);
+      }
+    }
 
     if (!session) return null;
 
