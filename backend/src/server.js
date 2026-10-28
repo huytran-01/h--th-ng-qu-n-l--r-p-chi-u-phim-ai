@@ -1,7 +1,8 @@
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 
 const { movies, showtimes, defaultSeats, combos, cinemas, rooms, users, bookings } = require("./data/mockData");
 const seatLockService = require("./services/seatLockService");
@@ -871,6 +872,7 @@ app.patch("/api/v1/admin/movies/:id", requirePermission("movies.manage"), (req, 
   const movie = movies.find(m => m.id === req.params.id);
   if (!movie) return res.status(404).json({ status: "ERROR", message: "Không tìm thấy phim." });
   Object.assign(movie, req.body);
+  dbService.updateMovie(movie.id, movie).catch(e => console.warn("Lỗi cập nhật phim MySQL:", e.message));
   res.json({ status: "SUCCESS", data: movie, message: "Đã cập nhật trạng thái phim." });
 });
 
@@ -1148,6 +1150,36 @@ app.get("/api/v1/admin/ai-health", requirePermission("ai.manage"), (req, res) =>
   });
 });
 
+/**
+ * Đồng bộ dữ liệu mới nhất từ MySQL Server vào bộ nhớ (Memory Cache)
+ * Đảm bảo mọi thay đổi (thêm/sửa/xóa phim, suất chiếu, vé) lưu vĩnh viễn khi tắt/mở lại server
+ */
+async function syncFromDatabase() {
+  if (database.isMySqlConnected()) {
+    try {
+      const dbMovies = await dbService.getMovies();
+      if (dbMovies && dbMovies.length > 0) {
+        movies.splice(0, movies.length, ...dbMovies);
+        console.log(`🎬 Đã đồng bộ ${dbMovies.length} phim từ MySQL Server vào hệ thống.`);
+      }
+      const dbShowtimes = await dbService.getShowtimes();
+      if (dbShowtimes && dbShowtimes.length > 0) {
+        showtimes.splice(0, showtimes.length, ...dbShowtimes);
+      }
+      const dbUsers = await dbService.getUsers();
+      if (dbUsers && dbUsers.length > 0) {
+        users.splice(0, users.length, ...dbUsers);
+      }
+      const dbBookings = await dbService.getBookings();
+      if (dbBookings && dbBookings.length > 0) {
+        bookings.splice(0, bookings.length, ...dbBookings);
+      }
+    } catch (err) {
+      console.warn("⚠️ Lỗi đồng bộ dữ liệu từ MySQL:", err.message);
+    }
+  }
+}
+
 // Khởi chạy server với cơ chế tự động chuyển cổng an toàn (Port Auto-failover)
 const startServer = (portToTry) => {
   const srv = app.listen(portToTry, async () => {
@@ -1158,6 +1190,7 @@ const startServer = (portToTry) => {
     console.log(` 👑 Thẻ Thành Viên CGV Membership & Phân Quyền RBAC`);
     console.log(`====================================================`);
     await database.testConnection();
+    await syncFromDatabase();
   });
 
   srv.on("error", (err) => {

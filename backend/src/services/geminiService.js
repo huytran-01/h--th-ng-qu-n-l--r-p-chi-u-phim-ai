@@ -8,13 +8,12 @@ const adminAnalyticsAgent = require("../agents/adminAnalyticsAgent");
 class GeminiService {
   constructor() {
     this.apiKey = (process.env.GEMINI_API_KEY || "").trim();
-    this.primaryModel = process.env.GEMINI_MODEL || "gemini-flash-lite-latest";
+    this.primaryModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
     this.modelsPool = [
       this.primaryModel,
-      "gemini-flash-lite-latest",
       "gemini-3.5-flash-lite",
-      "gemini-flash-latest",
-      "gemini-3.8-flash"
+      "gemini-flash-lite-latest",
+      "gemini-3.1-flash-lite"
     ].filter((m, i, arr) => arr.indexOf(m) === i);
   }
 
@@ -139,7 +138,7 @@ Quy định hoàn vé:
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${this.apiKey}`;
         
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000); // 8 giây timeout
+        const timeout = setTimeout(() => controller.abort(), 35000); // 35 giây timeout
 
         const res = await fetch(url, {
           method: "POST",
