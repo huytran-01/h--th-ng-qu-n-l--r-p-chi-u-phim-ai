@@ -660,6 +660,27 @@ class DbService {
     }
     return true;
   }
+
+  async resetBookingCheckIn(bookingCode) {
+    if (this.isUsingMySql()) {
+      try {
+        await db.execute(
+          `UPDATE bookings SET status = 'PAID', checked_in_at = NULL, checked_in_by = NULL WHERE booking_code = ?`,
+          [bookingCode]
+        );
+      } catch (err) {
+        console.error("Lỗi resetBookingCheckIn MySQL:", err.message);
+      }
+    }
+
+    const b = this.mock.bookings.find(item => item.bookingCode === bookingCode);
+    if (b) {
+      b.status = "PAID";
+      delete b.checkedInAt;
+      delete b.checkedInBy;
+    }
+    return true;
+  }
 }
 
 // Export Singleton Instance

@@ -440,6 +440,59 @@ app.post("/api/v1/bookings/check-in", requirePermission("bookings.scan"), (req, 
   });
 });
 
+// Hoàn tác / Reset trạng thái soát vé về PAID (Hỗ trợ Demo thử nghiệm nhiều lần)
+app.post("/api/v1/bookings/reset-check-in", requirePermission("bookings.scan"), (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ status: "ERROR", message: "Vui lòng cung cấp mã vé cần hoàn tác." });
+  }
+
+  const cleanCode = String(code).trim().toUpperCase();
+  const booking = bookings.find(b =>
+    (b.bookingCode && b.bookingCode.toUpperCase() === cleanCode) ||
+    (b.qrToken && b.qrToken.toUpperCase() === cleanCode)
+  );
+
+  if (!booking) {
+    return res.status(404).json({ status: "ERROR", message: `Không tìm thấy vé với mã "${code}".` });
+  }
+
+  booking.status = "PAID";
+  delete booking.checkedInAt;
+  delete booking.checkedInBy;
+  dbService.resetBookingCheckIn(booking.bookingCode).catch(e => console.warn("Lỗi reset MySQL:", e.message));
+
+  res.json({
+    status: "SUCCESS",
+    message: `Đã hoàn tác vé ${booking.bookingCode} về trạng thái "Chờ soát vé" (PAID).`,
+    data: { bookingCode: booking.bookingCode, status: "PAID" }
+  });
+});
+
+// Tạo nhanh vé demo mới chưa soát vé để test ngay lập tức
+app.post("/api/v1/bookings/create-demo-ticket", requirePermission("bookings.scan"), (req, res) => {
+  const sampleCodes = ["BKG-" + Math.floor(100000 + Math.random() * 900000)];
+  const newCode = sampleCodes[0];
+  const newBooking = {
+    bookingCode: newCode,
+    qrToken: "CGV-TICKET-" + newCode + "-XYZ",
+    userId: "user_guest",
+    movieId: "mov-01",
+    showtimeId: "st-101",
+    seats: ["C" + Math.floor(1 + Math.random() * 8), "C" + Math.floor(9 + Math.random() * 4)],
+    total: 350000,
+    status: "PAID",
+    bookedAt: new Date().toISOString()
+  };
+
+  bookings.unshift(newBooking);
+  res.status(201).json({
+    status: "SUCCESS",
+    message: `Đã khởi tạo thành công đơn vé ${newCode}.`,
+    data: newBooking
+  });
+});
+
 // 12. Thanh toán & Phát hành vé điện tử CGV (Tích lũy chi tiêu & thăng hạng CGV VIP)
 app.post("/api/v1/payments/checkout", (req, res) => {
   const { showtimeId, seatIds, userId, comboIds, customerInfo } = req.body;
