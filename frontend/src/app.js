@@ -2894,10 +2894,10 @@ async function checkGeminiStatus() {
     const indicator = document.getElementById("chatbot-status-indicator");
     if (indicator && json.gemini) {
       if (json.gemini.available) {
-        indicator.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles text-[9px] mr-1 text-cyan-400"></i>Hỗ trợ 24/7 (Google Gemini AI)`;
+        indicator.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles text-[9px] mr-1 text-cyan-400"></i>Trực tuyến • Trợ lý AI CGV`;
         indicator.className = "block text-[10px] text-cyan-400 font-semibold";
       } else {
-        indicator.innerHTML = `<i class="fa-solid fa-circle text-[8px] mr-1 text-green-400"></i>Hỗ trợ 24/7 (NLU Tiếng Việt)`;
+        indicator.innerHTML = `<i class="fa-solid fa-circle text-[8px] mr-1 text-green-400"></i>Trực tuyến • Hỗ trợ 24/7`;
         indicator.className = "block text-[10px] text-green-400 font-semibold";
       }
     }

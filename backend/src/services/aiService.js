@@ -203,6 +203,9 @@ class AIService {
       normalizedMessage.includes("bao cao") ||
       normalizedMessage.includes("tinh hinh ban ve") ||
       normalizedMessage.includes("ban duoc bao nhieu") ||
+      normalizedMessage.includes("ban the nao") ||
+      normalizedMessage.includes("phong ve") ||
+      normalizedMessage.includes("thong ke") ||
       normalizedMessage.includes("kpi") ||
       normalizedMessage.includes("tai chinh") ||
       normalizedMessage.includes("thu nhap")
