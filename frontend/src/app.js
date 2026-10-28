@@ -2970,16 +2970,6 @@ function appendChatMessage(text, sender, suggestedAction = null, responseData = 
       `;
     }
     let actionHTML = "";
-    if (suggestedAction && suggestedAction.type === "BOOKING_MODAL") {
-      actionHTML = `<button onclick="openBookingModal('${escapeChatHTML(suggestedAction.movieId)}')" class="mt-2 block w-full py-1.5 rounded-lg bg-cgv-red hover:bg-red-700 text-white text-[11px] font-bold text-center transition">👉 Mở đặt vé ngay</button>`;
-    }
-    if (responseData?.suggestedMovies?.length) {
-      actionHTML += `<div class="mt-2 space-y-1.5">${responseData.suggestedMovies.slice(0, 3).map(movie => `
-        <button onclick="openBookingModal('${escapeChatHTML(movie.id)}')" class="w-full flex items-center gap-2 p-1.5 rounded-lg bg-gray-900/80 hover:bg-gray-700 text-left transition">
-          <img src="${escapeChatHTML(movie.posterUrl || '')}" alt="" class="w-7 h-9 rounded object-cover">
-          <span class="text-[10px] font-semibold text-gray-200 truncate">${escapeChatHTML(movie.title)}</span>
-        </button>`).join('')}</div>`;
-    }
     if (responseData?.suggestedShowtimes?.length) {
       actionHTML += `<div class="mt-2 space-y-1.5">${responseData.suggestedShowtimes.slice(0, 3).map(showtime => `
         <button onclick="openBookingModal('${escapeChatHTML(showtime.movieId)}')" class="w-full p-1.5 rounded-lg bg-red-950/50 hover:bg-red-900/70 text-left text-[10px] text-red-200 transition">

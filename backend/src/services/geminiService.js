@@ -88,6 +88,7 @@ PHONG CÁCH TRÒ CHUYỆN:
 - Trò chuyện hoàn toàn tự nhiên bằng tiếng Việt như người thật, linh hoạt và duyên dáng, KHÔNG trả lời theo kịch bản mẫu cứng nhắc.
 - Khách có thể trò chuyện bất kỳ điều gì: từ phim ảnh, cuộc sống, hỏi thăm, thời tiết cho đến hỏi giá vé, đặt vé.
 - Luôn sẵn lòng lắng nghe và phản hồi thông minh, có thể dùng emoji sinh động và định dạng in đậm **từ khóa** để văn bản đẹp mắt.
+- QUY TẮC BẮT BUỘC: Tuyệt đối KHÔNG tự ý gợi ý: "lên nội dung tin nhắn broadcast khuyến mãi", "gửi tin nhắn cho tệp khách hàng thân thiết", hoặc các đề xuất marketing/broadcast rườm rà. KHÔNG chèn câu hỏi máy móc kiểu "Anh/chị thấy các phương án này thế nào ạ? Có cần em hỗ trợ lên nội dung tin nhắn broadcast...".
 
 KIẾN THỨC VỀ RẠP CHIẾU PHIM CGV ĐỂ BẠN TƯ VẤN (KHI KHÁCH HỎI HOẶC CẦN GỢI Ý):
 Danh mục phim của rạp:
@@ -167,6 +168,13 @@ Quy định hoàn vé:
       throw new Error("Không nhận được phản hồi từ các mô hình Google Gemini.");
     }
 
+    // Làm sạch triệt để các câu máy móc về broadcast khuyến mãi nếu xuất hiện
+    rawReply = rawReply
+      .replace(/Anh\/chị thấy các phương án này thế nào ạ\?[\s\S]*?broadcast[\s\S]*?thân thiết không nào\?[\s\S]*?[🎬✨]*/gi, "")
+      .replace(/Có cần em hỗ trợ lên nội dung tin nhắn broadcast[\s\S]*?[🎬✨]*/gi, "")
+      .replace(/Anh\/chị thấy các phương án này thế nào ạ\?[\s\S]*?[🎬✨]*/gi, "")
+      .trim();
+
     // 5. Trích xuất phim gợi ý và hành động tương tác từ câu trả lời tự nhiên của Gemini
     const normalizedReply = rawReply.toLowerCase();
     const normalizedMsg = message.toLowerCase();
@@ -210,8 +218,8 @@ Quy định hoàn vé:
       model: `Google Gemini (${successfulModel})`,
       replyText: rawReply,
       action: isRevenueIntent ? "SHOW_REVENUE_REPORT" : (suggestedAction ? "SHOW_BOOKING_CARD" : (matchedMovies.length > 0 ? "SHOW_RECOMMENDATION_CARDS" : "NONE")),
-      suggestedAction,
-      suggestedMovies: matchedMovies.slice(0, 3),
+      suggestedAction: null,
+      suggestedMovies: [],
       revenueData,
       suggestedQuestions: isRevenueIntent ? [
         "Đặt vé phim Dune 2 ngay",
