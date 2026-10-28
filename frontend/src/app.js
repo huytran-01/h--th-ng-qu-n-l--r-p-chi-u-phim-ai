@@ -1,5 +1,5 @@
 // Frontend Logic cho Hệ Thống CGV Cultureplex Cinema tích hợp AI
-const API_BASE = "http://localhost:5000/api/v1";
+const API_BASE = (typeof window !== "undefined" && window.location && window.location.origin && window.location.origin.startsWith("http")) ? `${window.location.origin}/api/v1` : "http://localhost:5000/api/v1";
 
 // ==================== GLOBAL STATES ==================== //
 let allMovies = [];
@@ -234,6 +234,16 @@ function updateAuthUI() {
   const staffTag = document.getElementById("staff-user-tag");
   if (staffTag) {
     staffTag.innerHTML = `<i class="fa-solid fa-user-check mr-2 text-green-400"></i>${currentUser.name} (${currentUser.role})`;
+  }
+  const staffAdminBtn = document.getElementById("staff-btn-admin-view");
+  if (staffAdminBtn) {
+    if (currentUser && currentUser.role === "ADMIN") {
+      staffAdminBtn.classList.remove("hidden");
+      staffAdminBtn.style.display = "inline-flex";
+    } else {
+      staffAdminBtn.classList.add("hidden");
+      staffAdminBtn.style.display = "none";
+    }
   }
 }
 
@@ -1709,27 +1719,159 @@ function goToBookingPage(page) {
 }
 
 async function confirmCheckInTicket(code) {
-  showConfirmDeleteModal(`Xác nhận soát vé cho mã ${code}? Khách sẽ được check-in vào phòng chiếu.`, async () => {
-    try {
-      const res = await apiFetch(`/bookings/check-in`, {
-        method: "POST",
-        body: JSON.stringify({ code })
-      });
-      const json = await res.json();
-      if (json.status === "SUCCESS") {
-        showToast(json.message, "success");
-        fetchAdminBookings();
-        fetchStaffBookings();
-      } else {
-        showToast(json.message || "Không thể soát vé.", "error");
-      }
-    } catch (err) {
-      showToast("Lỗi kết nối khi gửi yêu cầu soát vé.", "error");
+  const staffView = document.getElementById("staff-view");
+  if (staffView && !staffView.classList.contains("hidden")) {
+    handleStaffQuickCheckIn(code);
+    return;
+  }
+  if (!confirm(`Xác nhận soát vé cho mã ${code}? Khách sẽ được check-in vào phòng chiếu.`)) return;
+  try {
+    const res = await apiFetch(`/bookings/check-in`, {
+      method: "POST",
+      body: JSON.stringify({ code })
+    });
+    const json = await res.json();
+    if (json.status === "SUCCESS") {
+      if (typeof playBeep === "function") playBeep("success");
+      showToast(json.message, "success");
+      fetchAdminBookings();
+      fetchStaffBookings();
+    } else {
+      if (typeof playBeep === "function") playBeep("error");
+      showToast(json.message || "Không thể soát vé.", "error");
     }
-  });
+  } catch (err) {
+    showToast("Lỗi kết nối khi gửi yêu cầu soát vé.", "error");
+  }
 }
 
 // ==================== PHÂN HỆ NGHIỆP VỤ NHÂN VIÊN RẠP (STAFF POS & SOÁT VÉ) ==================== //
+
+/**
+ * Âm thanh phản hồi khi quét vé (Synthesized Web Audio API)
+ */
+function playBeep(type = "success") {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    if (type === "success") {
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1760, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+    } else {
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(300, ctx.currentTime);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+    }
+  } catch (e) {
+    // Không chặn nếu trình duyệt chưa có user gesture
+  }
+}
+
+let staffQrScanner = null;
+
+function switchStaffScanMode(mode) {
+  const codeSection = document.getElementById("staff-scan-mode-code");
+  const camSection = document.getElementById("staff-scan-mode-camera");
+  const btnCode = document.getElementById("btn-staff-mode-code");
+  const btnCam = document.getElementById("btn-staff-mode-camera");
+
+  if (mode === "camera") {
+    if (codeSection) codeSection.classList.add("hidden");
+    if (camSection) camSection.classList.remove("hidden");
+    if (btnCode) btnCode.className = "px-3.5 py-1.5 rounded-lg text-gray-400 hover:text-white text-xs font-bold transition flex items-center gap-1.5";
+    if (btnCam) btnCam.className = "px-3.5 py-1.5 rounded-lg bg-green-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow";
+    startStaffQrCamera();
+  } else {
+    if (camSection) camSection.classList.add("hidden");
+    if (codeSection) codeSection.classList.remove("hidden");
+    if (btnCam) btnCam.className = "px-3.5 py-1.5 rounded-lg text-gray-400 hover:text-white text-xs font-bold transition flex items-center gap-1.5";
+    if (btnCode) btnCode.className = "px-3.5 py-1.5 rounded-lg bg-green-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow";
+    stopStaffQrCamera();
+    const input = document.getElementById("staff-checkin-input");
+    if (input) input.focus();
+  }
+}
+
+async function startStaffQrCamera() {
+  const btnStart = document.getElementById("btn-start-camera");
+  const btnStop = document.getElementById("btn-stop-camera");
+  const readerEl = document.getElementById("staff-qr-reader");
+
+  if (typeof Html5Qrcode === "undefined") {
+    showToast("Thư viện quét mã QR đang được tải hoặc thiết bị chưa có kết nối Internet.", "warning");
+    return;
+  }
+
+  try {
+    if (!staffQrScanner) {
+      staffQrScanner = new Html5Qrcode("staff-qr-reader");
+    }
+    await staffQrScanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 220, height: 220 } },
+      (decodedText) => {
+        playBeep("success");
+        stopStaffQrCamera();
+        switchStaffScanMode("code");
+        handleStaffQuickCheckIn(decodedText);
+      },
+      () => {
+        // frame check, ignore
+      }
+    );
+    if (btnStart) btnStart.classList.add("hidden");
+    if (btnStop) btnStop.classList.remove("hidden");
+  } catch (err) {
+    console.warn("Camera start error:", err);
+    showToast("Không thể khởi động Camera. Vui lòng kiểm tra quyền truy cập Camera trên trình duyệt.", "error");
+    if (readerEl) {
+      readerEl.innerHTML = '<p class="text-xs text-red-400 p-4"><i class="fa-solid fa-triangle-exclamation mr-1.5"></i>Không thể mở camera. Vui lòng cấp quyền hoặc dùng ô nhập mã vé thủ công.</p>';
+    }
+  }
+}
+
+async function stopStaffQrCamera() {
+  const btnStart = document.getElementById("btn-start-camera");
+  const btnStop = document.getElementById("btn-stop-camera");
+  if (staffQrScanner) {
+    try {
+      await staffQrScanner.stop();
+      staffQrScanner.clear();
+    } catch (e) {
+      // ignore
+    }
+    staffQrScanner = null;
+  }
+  if (btnStart) btnStart.classList.remove("hidden");
+  if (btnStop) btnStop.classList.add("hidden");
+}
+
+function clearStaffInput() {
+  const input = document.getElementById("staff-checkin-input");
+  if (input) {
+    input.value = "";
+    input.focus();
+  }
+}
+
+function fillStaffDemoCode(code) {
+  const input = document.getElementById("staff-checkin-input");
+  if (input) input.value = code;
+  handleStaffQuickCheckIn(code);
+}
+
 
 let staffBookingPage = 1;
 let staffBookingLimit = 10;
@@ -1740,7 +1882,7 @@ let staffBookingSearchTimeout = null;
 
 async function fetchStaffBookings() {
   const tbody = document.getElementById("staff-bookings-table-body");
-  if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-400"><i class="fa-solid fa-spinner animate-spin mr-2 text-green-400"></i>Đang tải danh sách vé...</td></tr>`;
+  if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-400"><i class="fa-solid fa-spinner animate-spin mr-2 text-green-400"></i>Đang tải danh sách vé...</td></tr>';
 
   try {
     const query = new URLSearchParams({
@@ -1759,7 +1901,7 @@ async function fetchStaffBookings() {
       tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-red-400">${json.message || "Không thể tải danh sách vé."}</td></tr>`;
     }
   } catch (err) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-red-400">Không thể kết nối máy chủ.</td></tr>`;
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-red-400">Không thể kết nối máy chủ.</td></tr>';
   }
 }
 
@@ -1770,13 +1912,29 @@ function renderStaffBookingsTable(bookingsList, pagination, summary) {
   const ticketsEl = document.getElementById("staff-booking-total-tickets");
   const revenueEl = document.getElementById("staff-booking-total-revenue");
 
+  // Shift KPI counters
+  const statTotal = document.getElementById("staff-stat-total");
+  const statCheckedIn = document.getElementById("staff-stat-checkedin");
+  const statPending = document.getElementById("staff-stat-pending");
+  const statRevenue = document.getElementById("staff-stat-revenue");
+
+  if (statTotal) statTotal.textContent = Number(pagination?.total || (bookingsList ? bookingsList.length : 0)).toLocaleString("vi-VN");
+  if (statRevenue) statRevenue.textContent = `${Number(summary?.totalRevenue || 0).toLocaleString("vi-VN")} đ`;
+
+  if (bookingsList && Array.isArray(bookingsList)) {
+    const checkedInCount = bookingsList.filter(b => b.status === "CHECKED_IN").length;
+    const pendingCount = bookingsList.filter(b => b.status === "PAID").length;
+    if (statCheckedIn) statCheckedIn.textContent = checkedInCount;
+    if (statPending) statPending.textContent = pendingCount;
+  }
+
   if (!tbody) return;
   tbody.innerHTML = "";
   if (ticketsEl) ticketsEl.textContent = Number(summary?.totalTickets || 0).toLocaleString("vi-VN");
   if (revenueEl) revenueEl.textContent = `${Number(summary?.totalRevenue || 0).toLocaleString("vi-VN")} đ`;
 
   if (!bookingsList || bookingsList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" class="p-8 text-center text-gray-400">Chưa có vé nào phù hợp.</td></tr>`;
+    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-400">Chưa có vé nào phù hợp.</td></tr>';
     if (infoEl) infoEl.textContent = "0 vé";
     if (controlsEl) controlsEl.innerHTML = "";
     return;
@@ -1794,13 +1952,14 @@ function renderStaffBookingsTable(bookingsList, pagination, summary) {
     let actionBtn = "";
 
     if (booking.status === "CHECKED_IN") {
-      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold border bg-teal-950 text-teal-300 border-teal-800"><i class="fa-solid fa-check mr-1"></i>Đã vào rạp</span>`;
-      actionBtn = `<span class="text-teal-400 text-[11px] font-semibold"><i class="fa-solid fa-circle-check mr-1"></i>Đã soát vé</span>`;
+      const inTime = booking.checkedInAt ? new Date(booking.checkedInAt).toLocaleTimeString("vi-VN", {hour:"2-digit", minute:"2-digit"}) : "";
+      statusBadge = `<span class="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-teal-950 text-teal-300 border-teal-800 flex items-center gap-1 w-max"><i class="fa-solid fa-circle-check text-teal-400"></i> Đã vào rạp ${inTime ? '(' + inTime + ')' : ''}</span>`;
+      actionBtn = `<span class="text-teal-400 text-[11px] font-bold inline-flex items-center gap-1"><i class="fa-solid fa-check-double text-teal-300"></i> Đã soát vé</span>`;
     } else if (booking.status === "PAID") {
-      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold border bg-green-950 text-green-400 border-green-800">Đã thanh toán</span>`;
-      actionBtn = `<button onclick="confirmCheckInTicket('${booking.bookingCode}')" class="px-2.5 py-1 rounded bg-green-700 hover:bg-green-600 text-white text-[10px] font-bold transition inline-flex items-center gap-1 shadow"><i class="fa-solid fa-qrcode"></i> Soát vé</button>`;
+      statusBadge = `<span class="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-green-950 text-green-400 border-green-800 w-max block">Chờ soát vé</span>`;
+      actionBtn = `<button onclick="handleStaffQuickCheckIn('${booking.bookingCode}')" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-green-700 to-emerald-600 hover:from-green-600 hover:to-emerald-500 text-white text-[11px] font-bold transition inline-flex items-center gap-1.5 shadow-md shadow-green-900/30 active:scale-95"><i class="fa-solid fa-qrcode"></i> Soát vé ngay</button>`;
     } else {
-      statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-bold border bg-red-950 text-red-400 border-red-800">${booking.status}</span>`;
+      statusBadge = `<span class="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-red-950 text-red-400 border-red-800 w-max block">${booking.status}</span>`;
       actionBtn = `<span class="text-gray-500 text-[10px]">Không khả dụng</span>`;
     }
 
@@ -1815,11 +1974,11 @@ function renderStaffBookingsTable(bookingsList, pagination, summary) {
       </td>
       <td class="p-4">
         <b class="text-white text-xs block">${movie.title || booking.movieId}</b>
-        <span class="text-[10px] text-gray-400">${showtime.startTime || "-"}</span>
+        <span class="text-[10px] text-gray-400">${showtime.startTime ? new Date(showtime.startTime).toLocaleString('vi-VN', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : "-"}</span>
       </td>
       <td class="p-4 text-gray-300">
-        <span class="block text-white">${booking.room?.name || "-"}</span>
-        <span class="text-[10px] text-cgv-gold">${(booking.seats || []).join(", ")}</span>
+        <span class="block text-white font-medium">${booking.room?.name || "-"}</span>
+        <span class="text-xs text-cgv-gold font-bold font-mono">${(booking.seats || []).join(", ")}</span>
       </td>
       <td class="p-4 text-cgv-gold font-bold">${Number(booking.total || 0).toLocaleString("vi-VN")} đ</td>
       <td class="p-4">${statusBadge}</td>
@@ -1871,16 +2030,18 @@ function goToStaffBookingPage(page) {
   fetchStaffBookings();
 }
 
-async function handleStaffQuickCheckIn() {
+async function handleStaffQuickCheckIn(overrideCode = null) {
   const input = document.getElementById("staff-checkin-input");
   const resultBox = document.getElementById("staff-checkin-result");
-  const code = (input ? input.value : "").trim();
+  const code = (overrideCode || (input ? input.value : "")).trim();
 
   if (!code) {
-    showToast("Vui lòng nhập mã vé hoặc mã QR cần soát vé.", "warning");
+    showToast("Vui lòng nhập mã vé hoặc quét mã QR cần soát vé.", "warning");
     if (input) input.focus();
     return;
   }
+
+  if (input) input.value = code;
 
   try {
     const res = await apiFetch(`/bookings/check-in`, {
@@ -1889,37 +2050,130 @@ async function handleStaffQuickCheckIn() {
     });
     const json = await res.json();
 
-    if (resultBox) {
-      resultBox.classList.remove("hidden");
-      if (json.status === "SUCCESS") {
-        resultBox.className = "mt-5 p-4 rounded-xl bg-green-950/90 border border-green-600 text-green-200 text-xs";
-        resultBox.innerHTML = `
-          <div class="flex items-center gap-2 font-bold text-sm text-green-300 mb-2">
-            <i class="fa-solid fa-circle-check text-base"></i>
-            <span>${json.message}</span>
-          </div>
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-gray-300 pt-2 border-t border-green-800">
-            <div><span class="text-gray-400 block text-[10px]">Phim:</span> <b>${json.data.movieTitle}</b></div>
-            <div><span class="text-gray-400 block text-[10px]">Phòng:</span> <b>${json.data.roomName}</b></div>
-            <div><span class="text-gray-400 block text-[10px]">Ghế:</span> <b class="text-cgv-gold">${json.data.seats.join(", ")}</b></div>
-            <div><span class="text-gray-400 block text-[10px]">Giờ chiếu:</span> <b>${json.data.showtimeStart ? new Date(json.data.showtimeStart).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'}) : "-"}</b></div>
-          </div>
-        `;
-        showToast(json.message, "success");
-        if (input) input.value = "";
-        fetchStaffBookings();
-        fetchAdminBookings();
-      } else {
-        resultBox.className = "mt-5 p-4 rounded-xl bg-red-950/90 border border-red-700 text-red-200 text-xs";
-        resultBox.innerHTML = `
-          <div class="flex items-center gap-2 font-bold text-sm text-red-300">
-            <i class="fa-solid fa-circle-xmark text-base"></i>
-            <span>${json.message || "Không thể soát vé!"}</span>
-          </div>
-        `;
-        showToast(json.message || "Soát vé thất bại.", "error");
+    if (!resultBox) return;
+    resultBox.classList.remove("hidden");
+
+    if (json.status === "SUCCESS") {
+      playBeep("success");
+      if (typeof confetti === "function") {
+        confetti({ particleCount: 55, spread: 65, origin: { y: 0.6 } });
       }
+
+      const d = json.data;
+      const checkedTime = d.checkedInAt ? new Date(d.checkedInAt).toLocaleString("vi-VN") : "Vừa xong";
+      const showtimeFormatted = d.showtimeStart ? new Date(d.showtimeStart).toLocaleString("vi-VN", {
+        weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+      }) : "-";
+
+      resultBox.className = "mt-6 p-6 rounded-3xl bg-gradient-to-br from-green-950/90 via-gray-900 to-black border-2 border-green-500 shadow-2xl shadow-green-900/40 text-white transition-all";
+      resultBox.innerHTML = `
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-green-800/70">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-green-500 text-black flex items-center justify-center text-2xl font-black shadow-lg shadow-green-500/30">
+              <i class="fa-solid fa-check"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs px-2.5 py-0.5 rounded-full bg-green-500 text-black font-black uppercase tracking-wider">HỢP LỆ — MỜI VÀO RẠP</span>
+                <span class="text-[11px] text-green-300 font-mono font-bold">${d.bookingCode}</span>
+              </div>
+              <h3 class="text-xl sm:text-2xl font-black text-white mt-1 leading-tight">${d.movieTitle}</h3>
+            </div>
+          </div>
+          <button type="button" onclick="document.getElementById('staff-checkin-result').classList.add('hidden')" class="text-gray-400 hover:text-white text-xs px-3 py-1.5 rounded-xl bg-gray-800/60 hover:bg-gray-800 transition">
+            <i class="fa-solid fa-xmark mr-1"></i>Đóng
+          </button>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 py-5 border-b border-green-900/60 text-xs">
+          <div class="p-3.5 rounded-2xl bg-black/40 border border-green-900/50">
+            <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-1"><i class="fa-solid fa-door-open mr-1 text-green-400"></i>Phòng Chiếu</span>
+            <b class="text-sm font-black text-green-300 block">${d.roomName}</b>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-black/40 border border-green-900/50">
+            <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-1"><i class="fa-solid fa-couch mr-1 text-cgv-gold"></i>Vị Trí Ghế</span>
+            <b class="text-base sm:text-lg font-black text-cgv-gold block tracking-wide">${(d.seats || []).join(", ")}</b>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-black/40 border border-green-900/50">
+            <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-1"><i class="fa-solid fa-clock mr-1 text-cyan-400"></i>Suất Chiếu</span>
+            <b class="text-xs sm:text-sm font-bold text-gray-200 block">${showtimeFormatted}</b>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-black/40 border border-green-900/50">
+            <span class="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-1"><i class="fa-solid fa-user-check mr-1 text-purple-400"></i>Khách Hàng</span>
+            <b class="text-xs sm:text-sm font-bold text-gray-200 block truncate">${d.customerName || "Khách CGV"}</b>
+            <span class="text-[10px] text-purple-300 font-semibold">${d.customerTier || "MEMBER"}</span>
+          </div>
+        </div>
+
+        <div class="pt-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[11px] text-gray-400">
+          <div class="flex items-center gap-4">
+            <span><i class="fa-solid fa-stopwatch mr-1.5 text-green-400"></i>Soát lúc: <b class="text-white">${checkedTime}</b></span>
+            <span><i class="fa-solid fa-id-badge mr-1.5 text-green-400"></i>Nhân viên: <b class="text-white">${d.checkedInBy || "Staff"}</b></span>
+          </div>
+          <button type="button" onclick="clearStaffInput()" class="px-4 py-2 rounded-xl bg-green-600 hover:bg-green-500 text-white font-bold text-xs transition flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-qrcode"></i> <span>Quét Vé Tiếp Theo</span>
+          </button>
+        </div>
+      `;
+
+      showToast(`✓ Xác nhận vào rạp thành công cho vé ${d.bookingCode}!`, "success");
+      fetchStaffBookings();
+      fetchAdminBookings();
+
+    } else if (json.status === "ALREADY_CHECKED_IN") {
+      playBeep("error");
+      const d = json.data || {};
+      resultBox.className = "mt-6 p-6 rounded-3xl bg-gradient-to-br from-red-950/90 via-gray-900 to-black border-2 border-red-600 shadow-2xl shadow-red-900/50 text-white transition-all";
+      resultBox.innerHTML = `
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-red-600 text-white flex items-center justify-center text-2xl font-black shadow-lg shadow-red-600/40 animate-pulse">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div>
+              <span class="text-xs px-2.5 py-0.5 rounded-full bg-red-600 text-white font-black uppercase tracking-wider">CẢNH BÁO GIAN LẬN</span>
+              <h3 class="text-lg sm:text-xl font-black text-red-300 mt-1">VÉ ĐÃ ĐƯỢC CHECK-IN VÀO RẠP TRƯỚC ĐÓ!</h3>
+            </div>
+          </div>
+          <button type="button" onclick="document.getElementById('staff-checkin-result').classList.add('hidden')" class="text-gray-400 hover:text-white text-xs px-3 py-1.5 rounded-xl bg-gray-800/60 hover:bg-gray-800 transition">
+            <i class="fa-solid fa-xmark mr-1"></i>Đóng
+          </button>
+        </div>
+        <p class="text-xs text-red-200 mt-3 p-3.5 rounded-xl bg-red-950/80 border border-red-800/80 leading-relaxed font-semibold">
+          <i class="fa-solid fa-circle-exclamation mr-1.5 text-base text-red-400"></i>
+          ${json.message}
+        </p>
+        <div class="mt-4 pt-3 border-t border-red-900/50 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-400">
+          <span>Mã vé: <b class="text-white font-mono">${d.bookingCode || code}</b></span>
+          <span class="text-red-400 font-bold"><i class="fa-solid fa-ban mr-1"></i>TUYỆT ĐỐI KHÔNG CHO VÀO RẠP</span>
+        </div>
+      `;
+      showToast(json.message, "error");
+
+    } else {
+      playBeep("error");
+      resultBox.className = "mt-6 p-6 rounded-3xl bg-gradient-to-br from-red-950/90 via-gray-900 to-black border-2 border-red-700 shadow-xl shadow-red-900/40 text-white transition-all";
+      resultBox.innerHTML = `
+        <div class="flex items-start justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-red-800 text-white flex items-center justify-center text-xl font-bold">
+              <i class="fa-solid fa-circle-xmark"></i>
+            </div>
+            <div>
+              <span class="text-xs px-2.5 py-0.5 rounded-full bg-red-800 text-white font-bold uppercase tracking-wider">TỪ CHỐI CHECK-IN</span>
+              <h3 class="text-lg font-black text-red-300 mt-1">${json.message || "Vé không hợp lệ"}</h3>
+            </div>
+          </div>
+          <button type="button" onclick="document.getElementById('staff-checkin-result').classList.add('hidden')" class="text-gray-400 hover:text-white text-xs px-3 py-1.5 rounded-xl bg-gray-800/60 hover:bg-gray-800 transition">
+            <i class="fa-solid fa-xmark mr-1"></i>Đóng
+          </button>
+        </div>
+      `;
+      showToast(json.message || "Soát vé thất bại.", "error");
     }
+
+    resultBox.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
   } catch (err) {
     showToast("Lỗi kết nối khi gửi yêu cầu soát vé.", "error");
   }

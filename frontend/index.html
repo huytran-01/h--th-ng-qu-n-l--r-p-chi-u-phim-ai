@@ -16,6 +16,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   
+  <!-- HTML5 QR Code Scanner -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
   <!-- QRCode.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
@@ -689,84 +691,192 @@
     </div>
 
     <!-- VIEW: PHÂN HỆ NGHIỆP VỤ NHÂN VIÊN RẠP (STAFF POS & TICKET SCANNING WORKSPACE) -->
-    <div id="staff-view" class="hidden py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <!-- Header Staff -->
-      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-gray-800 mb-8">
+    <div id="staff-view" class="hidden py-8 max-w-[1600px] w-full mx-auto px-4 sm:px-8 lg:px-12">
+      
+      <!-- 1. Header Trạm Soát Vé POS -->
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-gray-800 mb-6">
         <div>
-          <div class="inline-flex items-center space-x-2 px-3.5 py-1 rounded-full bg-green-950 text-green-400 border border-green-800 text-xs font-bold mb-2">
+          <div class="inline-flex items-center space-x-2 px-3.5 py-1 rounded-full bg-green-950/80 text-green-400 border border-green-700/80 text-xs font-bold mb-2 shadow">
+            <span class="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
             <i class="fa-solid fa-cash-register mr-1"></i>
-            <span>Phân Hệ Vận Hành • Dành Riêng Cho Nhân Viên Rạp (Staff Only)</span>
+            <span>CỔNG SOÁT VÉ TRỰC TUYẾN • CGV LIVE GATE POS</span>
           </div>
-          <h1 class="text-3xl font-black text-white">Quầy Soát Vé & Nghiệp Vụ Rạp (POS)</h1>
-          <p class="text-sm text-gray-400 mt-1">Kiểm tra mã vé, quét mã QR check-in khách vào phòng chiếu và tra cứu lịch sử đơn vé.</p>
+          <h1 class="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
+            <span>Quầy Soát Vé & Nghiệp Vụ Rạp</span>
+            <span class="text-xs px-2.5 py-1 rounded-lg bg-green-950 text-green-300 border border-green-800 font-semibold hidden sm:inline-block">Staff & Admin</span>
+          </h1>
+          <p class="text-xs sm:text-sm text-gray-400 mt-1">Hệ thống quét mã QR & mã vé điện tử thời gian thực — Xác thực vé, kiểm tra phòng chiếu, ghế ngồi và ngăn chặn gian lận.</p>
         </div>
-        <div class="flex items-center gap-3">
-          <span id="staff-user-tag" class="px-3.5 py-1.5 rounded-xl bg-gray-900 border border-green-800/80 text-xs text-green-300 font-bold flex items-center shadow">
+
+        <!-- User tag & Điều hướng nhanh -->
+        <div class="flex flex-wrap items-center gap-2.5">
+          <span id="staff-user-tag" class="px-3.5 py-2 rounded-xl bg-gray-900 border border-green-800/80 text-xs text-green-300 font-bold flex items-center shadow">
             <i class="fa-solid fa-user-check mr-2 text-green-400"></i>Nhân viên rạp
           </span>
-          <button onclick="switchView('home')" class="px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition flex items-center gap-1.5">
-            <i class="fa-solid fa-arrow-left"></i> Về Trang Khách Hàng
+          <button id="staff-btn-admin-view" onclick="switchView('admin')" class="hidden px-3.5 py-2 rounded-xl bg-red-950/80 hover:bg-red-900/80 border border-red-800 text-red-200 text-xs font-bold transition flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-shield-halved"></i> <span>Quản Trị Admin</span>
+          </button>
+          <button onclick="switchView('home')" class="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-arrow-left"></i> <span>Về Trang Khách Hàng</span>
           </button>
         </div>
       </div>
 
-      <!-- Khung Thao Tác Soát Vé Nhanh POS -->
-      <div class="p-6 rounded-2xl bg-gradient-to-r from-gray-900 via-gray-900 to-green-950/40 border border-green-800/70 shadow-2xl mb-8">
-        <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-          <div class="flex items-center gap-4">
-            <div class="w-14 h-14 rounded-2xl bg-green-950 border border-green-600 flex items-center justify-center text-green-400 text-2xl shadow-lg shadow-green-900/40">
+      <!-- 2. Thống Kê Ca Trực (Shift KPI Summary) -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3.5 mb-6">
+        <div class="p-4 rounded-2xl bg-cgv-card border border-gray-800 flex items-center justify-between shadow">
+          <div>
+            <span class="text-[11px] text-gray-400 uppercase font-bold tracking-wider block">Tổng Vé Trong Ca</span>
+            <b id="staff-stat-total" class="text-xl sm:text-2xl font-black text-white mt-0.5 block">0</b>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center text-gray-300 text-lg">
+            <i class="fa-solid fa-ticket"></i>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-gradient-to-br from-green-950/40 to-cgv-card border border-green-800/60 flex items-center justify-between shadow">
+          <div>
+            <span class="text-[11px] text-green-400 uppercase font-bold tracking-wider block">Đã Vào Rạp</span>
+            <b id="staff-stat-checkedin" class="text-xl sm:text-2xl font-black text-green-300 mt-0.5 block">0</b>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-green-950 border border-green-700 flex items-center justify-center text-green-400 text-lg">
+            <i class="fa-solid fa-circle-check"></i>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-gradient-to-br from-yellow-950/40 to-cgv-card border border-yellow-800/60 flex items-center justify-between shadow">
+          <div>
+            <span class="text-[11px] text-yellow-400 uppercase font-bold tracking-wider block">Chờ Soát Vé</span>
+            <b id="staff-stat-pending" class="text-xl sm:text-2xl font-black text-yellow-300 mt-0.5 block">0</b>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-yellow-950 border border-yellow-700 flex items-center justify-center text-yellow-400 text-lg">
+            <i class="fa-solid fa-clock"></i>
+          </div>
+        </div>
+
+        <div class="p-4 rounded-2xl bg-cgv-card border border-gray-800 flex items-center justify-between shadow">
+          <div>
+            <span class="text-[11px] text-gray-400 uppercase font-bold tracking-wider block">Doanh Thu Vé</span>
+            <b id="staff-stat-revenue" class="text-lg sm:text-xl font-black text-cgv-gold mt-0.5 block">0 đ</b>
+          </div>
+          <div class="w-11 h-11 rounded-xl bg-yellow-950/50 border border-yellow-800/50 flex items-center justify-center text-cgv-gold text-lg">
+            <i class="fa-solid fa-coins"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Khu Vực Soát Vé Trực Tiếp POS (Scanner Console) -->
+      <div class="p-6 rounded-3xl bg-gradient-to-r from-gray-900 via-gray-900 to-green-950/30 border border-green-800/70 shadow-2xl mb-8 relative overflow-hidden">
+        
+        <!-- Header Console + Tab Switcher -->
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-gray-800 mb-5">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-green-950 border border-green-600 flex items-center justify-center text-green-400 text-2xl shadow-lg shadow-green-900/50">
               <i class="fa-solid fa-qrcode"></i>
             </div>
             <div>
-              <h3 class="text-lg font-black text-white flex items-center gap-2">
-                Cổng Xác Thực & Soát Vé Vào Rạp
-                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-950 text-green-300 border border-green-800">Sẵn sàng</span>
-              </h3>
-              <p class="text-xs text-gray-400 mt-1">Nhập mã vé (VD: CGV-xxxxxx hoặc BKG-xxxxxx) hoặc nội dung mã QR của khách hàng để check-in.</p>
+              <h2 class="text-lg font-black text-white flex items-center gap-2">
+                Cổng Xác Thực & Soát Vé Khách Vào Rạp
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-950 text-green-300 border border-green-700">SẴN SÀNG</span>
+              </h2>
+              <p class="text-xs text-gray-400 mt-0.5">Hỗ trợ máy quét mã vạch (Barcode Scanner USB), camera QR hoặc nhập mã thủ công.</p>
             </div>
           </div>
-          
-          <div class="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-            <div class="relative w-full sm:w-72">
-              <i class="fa-solid fa-ticket absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
-              <input type="text" id="staff-checkin-input" placeholder="Nhập mã vé hoặc mã QR..." class="bg-gray-900 border border-gray-700 text-xs rounded-xl pl-9 pr-3 py-2.5 text-gray-200 focus:outline-none focus:border-green-500 w-full font-mono">
-            </div>
-            <button onclick="handleStaffQuickCheckIn()" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-green-700 to-emerald-600 hover:from-green-600 hover:to-emerald-500 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-green-700/30">
-              <i class="fa-solid fa-circle-check text-sm"></i>
-              <span>Xác Nhận Cho Vào Rạp</span>
+
+          <!-- Switch Mode: Phím/Barcode vs Camera -->
+          <div class="flex items-center bg-gray-950 p-1 rounded-xl border border-gray-800">
+            <button type="button" onclick="switchStaffScanMode('code')" id="btn-staff-mode-code" class="px-3.5 py-1.5 rounded-lg bg-green-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow">
+              <i class="fa-solid fa-keyboard"></i> Nhập Mã / Barcode
+            </button>
+            <button type="button" onclick="switchStaffScanMode('camera')" id="btn-staff-mode-camera" class="px-3.5 py-1.5 rounded-lg text-gray-400 hover:text-white text-xs font-bold transition flex items-center gap-1.5">
+              <i class="fa-solid fa-camera"></i> Camera Quét QR
             </button>
           </div>
         </div>
 
-        <!-- Khung phản hồi kết quả soát vé trực quan -->
-        <div id="staff-checkin-result" class="hidden mt-5 p-4 rounded-xl bg-gray-950/80 border border-gray-800 text-xs transition"></div>
-      </div>
+        <!-- Mode 1: Nhập mã / Quét Barcode Gun -->
+        <div id="staff-scan-mode-code" class="space-y-4">
+          <div class="flex flex-col md:flex-row items-center gap-3">
+            <div class="relative flex-1 w-full">
+              <i class="fa-solid fa-barcode absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-base"></i>
+              <input type="text" id="staff-checkin-input" onkeydown="if(event.key==='Enter') handleStaffQuickCheckIn()" placeholder="Quét mã QR hoặc nhập mã vé (VD: BKG-240901, BKG-240842)..." class="w-full bg-black/70 border-2 border-gray-700 focus:border-green-500 text-sm sm:text-base font-mono rounded-2xl pl-12 pr-10 py-3.5 text-white placeholder-gray-500 focus:outline-none transition shadow-inner">
+              <button type="button" onclick="clearStaffInput()" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-xs">
+                <i class="fa-solid fa-circle-xmark"></i>
+              </button>
+            </div>
+            <button onclick="handleStaffQuickCheckIn()" type="button" class="w-full md:w-auto px-7 py-3.5 rounded-2xl bg-gradient-to-r from-green-700 via-emerald-600 to-green-600 hover:from-green-600 hover:to-emerald-500 text-white font-black text-sm tracking-wide transition flex items-center justify-center gap-2 shadow-xl shadow-green-700/30 whitespace-nowrap active:scale-[0.98]">
+              <i class="fa-solid fa-circle-check text-base"></i>
+              <span>XÁC NHẬN CHO VÀO RẠP</span>
+            </button>
+          </div>
 
-      <!-- Bảng Quản Lý & Tra Cứu Toàn Bộ Đơn Vé Của Khách Hàng -->
-      <div class="space-y-4">
-        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h3 class="text-lg font-bold text-white flex items-center gap-2">
-              <i class="fa-solid fa-list-check text-cgv-red"></i>
-              Danh Sách Vé Khách Hàng Đã Đặt
-            </h3>
-            <p class="text-xs text-gray-400">Tra cứu nhanh mã vé, thông tin ghế, suất chiếu và thực hiện soát vé thủ công.</p>
+          <!-- Quick Test Demo Chips -->
+          <div class="flex flex-wrap items-center gap-2 pt-1 text-xs">
+            <span class="text-gray-400 font-semibold flex items-center gap-1">
+              <i class="fa-solid fa-bolt text-cgv-gold"></i> Thử nhanh mã vé mẫu:
+            </span>
+            <button type="button" onclick="fillStaffDemoCode('BKG-240901')" class="px-3 py-1 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 font-mono transition">
+              🎟️ BKG-240901 (Dune 2)
+            </button>
+            <button type="button" onclick="fillStaffDemoCode('BKG-240842')" class="px-3 py-1 rounded-lg bg-gray-800/80 hover:bg-gray-700 text-gray-300 hover:text-white border border-gray-700 font-mono transition">
+              🎟️ BKG-240842 (Oppenheimer)
+            </button>
+            <button type="button" onclick="fillStaffDemoCode('BKG-INVALID-99')" class="px-3 py-1 rounded-lg bg-red-950/40 hover:bg-red-950/70 text-red-300 border border-red-900/50 font-mono transition">
+              ⚠️ Thử vé không tồn tại
+            </button>
           </div>
         </div>
 
-        <div class="p-4 rounded-2xl bg-cgv-card border border-gray-800 flex flex-col xl:flex-row items-center justify-between gap-4">
+        <!-- Mode 2: Camera Quét QR Trực Tiếp -->
+        <div id="staff-scan-mode-camera" class="hidden space-y-4">
+          <div class="max-w-md mx-auto p-4 rounded-2xl bg-black/80 border border-green-800 text-center">
+            <div id="staff-qr-reader" class="overflow-hidden rounded-xl bg-gray-950 min-h-[260px] flex items-center justify-center relative">
+              <p class="text-xs text-gray-400 p-4">Nhấn nút bên dưới để khởi động Camera quét mã QR vé của khách hàng.</p>
+            </div>
+            <div class="mt-4 flex items-center justify-center gap-3">
+              <button type="button" onclick="startStaffQrCamera()" id="btn-start-camera" class="px-5 py-2.5 rounded-xl bg-green-700 hover:bg-green-600 text-white font-bold text-xs transition flex items-center gap-2 shadow">
+                <i class="fa-solid fa-video"></i> Bật Camera Quét QR
+              </button>
+              <button type="button" onclick="stopStaffQrCamera()" id="btn-stop-camera" class="hidden px-5 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-xs transition flex items-center gap-2">
+                <i class="fa-solid fa-video-slash"></i> Tắt Camera
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Khung Kết Quả Soát Vé Trực Quan (Boarding Pass / E-Ticket Clearance Card) -->
+        <div id="staff-checkin-result" class="hidden mt-6 transition-all duration-300"></div>
+      </div>
+
+      <!-- 4. Bảng Lịch Sử & Tra Cứu Toàn Bộ Đơn Vé (Live Booking Ledger) -->
+      <div class="space-y-4">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h3 class="text-xl font-black text-white flex items-center gap-2.5">
+              <i class="fa-solid fa-list-check text-cgv-red"></i>
+              Danh Sách Vé Khách Hàng Đã Đặt
+            </h3>
+            <p class="text-xs text-gray-400 mt-0.5">Tra cứu mã vé, kiểm tra tình trạng vào phòng chiếu hoặc thực hiện soát vé trực tiếp từng đơn.</p>
+          </div>
+          <button type="button" onclick="fetchStaffBookings()" class="px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold transition flex items-center gap-1.5 shadow">
+            <i class="fa-solid fa-arrows-rotate"></i> <span>Làm Mới</span>
+          </button>
+        </div>
+
+        <!-- Thanh Tìm Kiếm & Lọc -->
+        <div class="p-4 rounded-2xl bg-cgv-card border border-gray-800 flex flex-col xl:flex-row items-center justify-between gap-4 shadow">
           <div class="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto flex-1">
             <div class="relative w-full sm:max-w-sm">
               <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
               <input type="text" id="staff-booking-search" oninput="handleStaffBookingSearch(this.value)" placeholder="Tìm mã vé, khách hàng, phim..." class="field pl-9">
             </div>
-            <select id="staff-booking-status" onchange="handleStaffBookingStatusFilter(this.value)" class="w-full sm:w-auto bg-gray-900 border border-gray-700 text-xs rounded-xl px-3 py-2 text-gray-300 focus:outline-none">
+            <select id="staff-booking-status" onchange="handleStaffBookingStatusFilter(this.value)" class="w-full sm:w-auto bg-gray-900 border border-gray-700 text-xs rounded-xl px-3.5 py-2 text-gray-300 focus:outline-none focus:border-green-500">
               <option value="ALL">Tất cả trạng thái</option>
               <option value="PAID">Đã thanh toán (Chờ soát vé)</option>
-              <option value="CHECKED_IN">Đã soát vé vào rạp</option>
+              <option value="CHECKED_IN">Đã vào rạp (Đã soát vé)</option>
               <option value="CANCELLED">Đã hủy / Hoàn tiền</option>
             </select>
-            <input type="date" id="staff-booking-date" onchange="handleStaffBookingDateFilter(this.value)" class="w-full sm:w-auto bg-gray-900 border border-gray-700 text-xs rounded-xl px-3 py-2 text-gray-300 focus:outline-none" title="Lọc theo ngày đặt vé">
+            <input type="date" id="staff-booking-date" onchange="handleStaffBookingDateFilter(this.value)" class="w-full sm:w-auto bg-gray-900 border border-gray-700 text-xs rounded-xl px-3.5 py-2 text-gray-300 focus:outline-none focus:border-green-500" title="Lọc theo ngày đặt vé">
           </div>
           <div class="flex items-center gap-5 text-xs whitespace-nowrap">
             <span class="text-gray-400">Vé: <b id="staff-booking-total-tickets" class="text-white">0</b></span>
@@ -774,10 +884,11 @@
           </div>
         </div>
 
+        <!-- Bảng Dữ Liệu -->
         <div class="rounded-2xl bg-cgv-card border border-gray-800 overflow-hidden shadow-xl">
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs">
-              <thead class="bg-gray-900/80 text-gray-400 uppercase tracking-wider text-[11px] border-b border-gray-800">
+              <thead class="bg-gray-900/90 text-gray-400 uppercase tracking-wider text-[11px] border-b border-gray-800">
                 <tr>
                   <th class="p-4">Mã vé / Thời gian</th>
                   <th class="p-4">Khách hàng</th>

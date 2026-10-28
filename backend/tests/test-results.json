@@ -1,0 +1,287 @@
+{
+  "timestamp": "2026-10-28T11:04:56.101Z",
+  "passCount": 40,
+  "failCount": 0,
+  "results": [
+    {
+      "id": "TC-AUTH-01",
+      "name": "Đăng ký tài khoản CUSTOMER mới & Sinh thẻ CGV 16 số",
+      "status": "PASS",
+      "duration": 42,
+      "detail": "Mã thẻ: 9999-6186-4960-2843, Điểm: 100"
+    },
+    {
+      "id": "TC-AUTH-02",
+      "name": "Đăng ký với email đã tồn tại -> Chặn lỗi 400",
+      "status": "PASS",
+      "duration": 3,
+      "detail": "Email này đã được đăng ký tài khoản thành viên CGV."
+    },
+    {
+      "id": "TC-AUTH-03",
+      "name": "Đăng nhập vai trò CUSTOMER chuẩn",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Token: cgv_user_guest_d50..., User: Khách hàng CGV VIP"
+    },
+    {
+      "id": "TC-AUTH-04",
+      "name": "Đăng nhập vai trò STAFF chuẩn",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Staff: Lê Minh Anh"
+    },
+    {
+      "id": "TC-AUTH-05",
+      "name": "Đăng nhập vai trò ADMIN chuẩn",
+      "status": "PASS",
+      "duration": 1,
+      "detail": "Admin: Nguyễn Quang Huy"
+    },
+    {
+      "id": "TC-AUTH-06",
+      "name": "Kiểm tra ranh giới RBAC: Chặn 403 FORBIDDEN khi vượt quyền",
+      "status": "PASS",
+      "duration": 6,
+      "detail": "Cả 3 trường hợp vi phạm quyền hạn đều bị chặn 403 FORBIDDEN chính xác"
+    },
+    {
+      "id": "TC-CAT-01",
+      "name": "Lấy toàn bộ danh sách phim (Đang chiếu / Sắp chiếu)",
+      "status": "PASS",
+      "duration": 3,
+      "detail": "Tìm thấy 14 bộ phim"
+    },
+    {
+      "id": "TC-CAT-02",
+      "name": "Lọc phim theo trạng thái NOW_SHOWING & Phân trang",
+      "status": "PASS",
+      "duration": 4,
+      "detail": "Trang 1: 4 phim (Tổng: 8)"
+    },
+    {
+      "id": "TC-CAT-03",
+      "name": "Tìm kiếm phim theo từ khóa & lọc thể loại Hành động",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Tìm thấy 4 phim thể loại Hành động"
+    },
+    {
+      "id": "TC-CAT-04",
+      "name": "Lấy danh sách suất chiếu của phim mov-01 (Dune 2)",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Phim mov-01 có 5 suất chiếu"
+    },
+    {
+      "id": "TC-CAT-05",
+      "name": "Tải sơ đồ 48 ghế ngồi của suất chiếu st-101",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Sơ đồ ghế: 80 ghế đầy đủ Standard/VIP/Sweetbox"
+    },
+    {
+      "id": "TC-BOOK-01",
+      "name": "User A khóa ghế D5, D6 thành công (TTL 10 phút)",
+      "status": "PASS",
+      "duration": 1,
+      "detail": "Khóa thành công D5, D6 - TTL: 600s"
+    },
+    {
+      "id": "TC-BOOK-02",
+      "name": "User B cố tình khóa trùng ghế D5 -> Nhận 409 CONFLICT",
+      "status": "PASS",
+      "duration": 1,
+      "detail": "Chặn xung đột thành công: Một số ghế đã có người giữ hoặc đã được bán"
+    },
+    {
+      "id": "TC-BOOK-03",
+      "name": "Lấy danh mục Combo Bắp Nước Concession",
+      "status": "PASS",
+      "duration": 1,
+      "detail": "Menu F&B: CGV My Combo, CGV Couple Sweet Combo, CGV Family Friends Combo, Premium Nachos Combo"
+    },
+    {
+      "id": "TC-BOOK-04",
+      "name": "User A thanh toán đơn vé D5, D6 kèm Combo F&B",
+      "status": "PASS",
+      "duration": 21,
+      "detail": "Mã vé: CGV-496022, QR: CGV-TICKET-CGV-49602..., Tổng: 464.000đ"
+    },
+    {
+      "id": "TC-BOOK-05",
+      "name": "Xác nhận trạng thái ghế D5, D6 đã chuyển sang BOOKED",
+      "status": "PASS",
+      "duration": 3,
+      "detail": "Ghế D5, D6 đã chính thức chuyển sang BOOKED"
+    },
+    {
+      "id": "TC-BOOK-06",
+      "name": "Kiểm tra tích lũy chi tiêu & điểm thưởng CGV Membership",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Chi tiêu: 3.114.000đ, Điểm tích lũy: 1714"
+    },
+    {
+      "id": "TC-BOOK-07",
+      "name": "Cố thanh toán ghế chưa khóa / người khác giữ -> Chặn 409",
+      "status": "PASS",
+      "duration": 1,
+      "detail": "Chặn thanh toán ghế chưa khóa hợp lệ"
+    },
+    {
+      "id": "TC-POS-01",
+      "name": "Nhân viên rạp (STAFF) soát vé QR thành công lần đầu",
+      "status": "PASS",
+      "duration": 5,
+      "detail": "Đã soát vé CGV-496022 lúc 18:04:56"
+    },
+    {
+      "id": "TC-POS-02",
+      "name": "Quét lại chính mã vé đó lần 2 -> Chặn ALREADY_CHECKED_IN",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Chống gian lận tái sử dụng vé: Vé CGV-496022 đã được soát vé vào rạp lúc 18:04:56 28/10/2026. Không thể tái sử dụng!"
+    },
+    {
+      "id": "TC-POS-03",
+      "name": "Soát vé với mã không tồn tại -> Báo lỗi 404 NOT_FOUND",
+      "status": "PASS",
+      "duration": 0,
+      "detail": "Không tìm thấy thông tin vé với mã \"CGV-FAKE-999999\"."
+    },
+    {
+      "id": "TC-POS-04",
+      "name": "Staff & Admin tra cứu danh sách toàn bộ vé đã đặt",
+      "status": "PASS",
+      "duration": 3,
+      "detail": "Đơn vé: 4, Tổng doanh thu: 1.578.000đ"
+    },
+    {
+      "id": "TC-POS-05",
+      "name": "Khách hàng tra cứu trạng thái đơn vé qua cổng CSKH",
+      "status": "PASS",
+      "duration": 3,
+      "detail": "Tìm thấy đơn vé của phim: Dune: Hành Tinh Cát - Phần 2"
+    },
+    {
+      "id": "TC-POS-06",
+      "name": "Khách hàng xem lịch sử các vé đã đặt cá nhân",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Khách hàng có 4 vé trong lịch sử cá nhân"
+    },
+    {
+      "id": "TC-REF-01",
+      "name": "Đặt vé chuẩn bị test hoàn vé mốc > 24h (st-test-future-24h)",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Tạo vé CGV-496065 cho suất chiếu sau 48h"
+    },
+    {
+      "id": "TC-REF-02",
+      "name": "Hoàn vé mốc > 24h trước suất chiếu -> Hoàn 100% giá trị",
+      "status": "PASS",
+      "duration": 1,
+      "detail": "Duyệt hoàn 100%: 120.000đ (Chính sách: > 24 giờ trước suất chiếu)"
+    },
+    {
+      "id": "TC-REF-03",
+      "name": "Kiểm tra ghế A1 của suất chiếu tương lai quay về AVAILABLE",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Ghế A1 đã được giải phóng thành công về trạng thái AVAILABLE"
+    },
+    {
+      "id": "TC-REF-04",
+      "name": "Đặt vé chuẩn bị test hoàn vé mốc 2h - 24h (st-test-mid-10h)",
+      "status": "PASS",
+      "duration": 1,
+      "detail": "Tạo vé CGV-496069 cho suất chiếu sau 10h"
+    },
+    {
+      "id": "TC-REF-05",
+      "name": "Hoàn vé mốc 2h - 24h trước suất chiếu -> Hoàn 50% giá trị",
+      "status": "PASS",
+      "duration": 1,
+      "detail": "Duyệt hoàn 50%: 60.000đ (Chính sách: Từ 2 - 24 giờ trước suất chiếu)"
+    },
+    {
+      "id": "TC-REF-06",
+      "name": "Hoàn vé mốc < 2h trước suất chiếu -> Từ chối hoàn vé (0%)",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Từ chối hoàn vé chuẩn xác: Chính sách không hỗ trợ hoàn vé trong vòng 2 giờ trước suất chiếu"
+    },
+    {
+      "id": "TC-AI-01",
+      "name": "Kiểm tra trạng thái Gemini AI & Engine Đang Kích Hoạt",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Engine: Rule-based NLU (Offline) (Gemini Status: NOT_CONFIGURED)"
+    },
+    {
+      "id": "TC-AI-02",
+      "name": "Chatbot AI: Trả lời tự nhiên & sinh suggestedAction",
+      "status": "PASS",
+      "duration": 3,
+      "detail": "Bot phản hồi: \"🎬 Tìm thấy **5** suất chiếu cho phim **Dune: Hành Tinh Cát ...\""
+    },
+    {
+      "id": "TC-AI-03",
+      "name": "RecommendationAgent: Thuật toán Hybrid & Match %",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Top 1: Dune: Hành Tinh Cát - Phần 2 (Trùng khớp: 80%) - \"Phù hợp với gu phim Khoa học viễn tưởng & Hành động của bạn\""
+    },
+    {
+      "id": "TC-AI-04",
+      "name": "RecommendationAgent: Tìm phim tương tự theo Embedding",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Phim tương tự Dune 2: Oppenheimer, Godzilla x Kong: Đế Chế Mới, Kung Fu Panda 4"
+    },
+    {
+      "id": "TC-AI-05",
+      "name": "BookingAgent: Gợi ý cụm ghế tối ưu & Áp voucher HSSV20 (-20%)",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Ghế gợi ý: D1, D2 | Giảm giá HSSV: -75.000đ"
+    },
+    {
+      "id": "TC-AI-06",
+      "name": "AdminAnalyticsAgent: Báo cáo KPI, LightGBM Dự báo & Lịch chiếu",
+      "status": "PASS",
+      "duration": 5,
+      "detail": "KPI Occupancy: NaN% | Dự báo 6 khung giờ: OK | Lịch tối ưu: 0 suất"
+    },
+    {
+      "id": "TC-ADM-01",
+      "name": "Admin tạo mới phim điện ảnh (CRUD Movie)",
+      "status": "PASS",
+      "duration": 1,
+      "detail": "Đã thêm phim: Avatar: Dòng Chảy Của Nước (ID: mov-6088)"
+    },
+    {
+      "id": "TC-ADM-02",
+      "name": "Admin tạo mới suất chiếu cho phim vừa tạo (CRUD Showtime)",
+      "status": "PASS",
+      "duration": 2,
+      "detail": "Đã tạo suất chiếu st-96090 phòng room-01 định dạng IMAX"
+    },
+    {
+      "id": "TC-ADM-03",
+      "name": "Admin quản lý danh sách người dùng & phân trang",
+      "status": "PASS",
+      "duration": 3,
+      "detail": "Tổng tài khoản: 8 (Hiển thị trang 1: 5 users)"
+    },
+    {
+      "id": "TC-PERF-01",
+      "name": "Đo thời gian phản hồi API nghiệp vụ (< 200ms) & Chịu lỗi Dual-Mode",
+      "status": "PASS",
+      "duration": 6,
+      "detail": "SLA < 200ms Đạt: [GET Movies: 2ms | GET Seats Matrix: 2ms | GET Combos: 1ms | GET AI Recommendations: 1ms]"
+    }
+  ]
+}
