@@ -70,6 +70,17 @@ class SeatLockService {
     return { success: true, message: "Đã giải phóng ghế" };
   }
 
+  // Giải phóng ghế đã mua (BOOKED -> AVAILABLE) khi hoàn vé thành công
+  releaseBookedSeats(showtimeId, seatIds) {
+    const bookedSet = this.bookedSeats.get(showtimeId);
+    if (bookedSet) {
+      for (const seatId of seatIds) {
+        bookedSet.delete(seatId);
+      }
+    }
+    return { success: true, message: "Đã giải phóng ghế đã đặt thành AVAILABLE" };
+  }
+
   // Chuyển ghế sang trạng thái ĐÃ MUA (sau khi thanh toán thành công)
   confirmBooking(showtimeId, seatIds, userId) {
     const now = Date.now();

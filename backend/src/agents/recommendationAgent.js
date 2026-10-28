@@ -157,9 +157,9 @@ class RecommendationAgent {
    */
   getPersonalizedRecommendations(userId = "user_guest", userPreferences = {}, limit = 6) {
     const profile = MOCK_USER_PROFILES[userId];
-    const preferredGenres = userPreferences.genres
-      || profile?.genres
-      || ["Khoa học viễn tưởng", "Hành động", "Tâm lý"];
+    const preferredGenres = (Array.isArray(userPreferences.genres) && userPreferences.genres.length > 0)
+      ? userPreferences.genres
+      : (profile?.genres || ["Khoa học viễn tưởng", "Hành động", "Tâm lý"]);
 
     const scoredMovies = movies.map(movie => {
       // Weight 1: Content-based (50%) — độ trùng thể loại

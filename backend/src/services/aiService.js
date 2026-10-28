@@ -196,6 +196,188 @@ class AIService {
 
     // ---- Phân loại Intent ---- //
 
+    // Intent 1: Báo cáo doanh số & Tình hình kinh doanh rạp CGV
+    if (
+      normalizedMessage.includes("doanh so") ||
+      normalizedMessage.includes("doanh thu") ||
+      normalizedMessage.includes("bao cao") ||
+      normalizedMessage.includes("tinh hinh ban ve") ||
+      normalizedMessage.includes("ban duoc bao nhieu") ||
+      normalizedMessage.includes("ban the nao") ||
+      normalizedMessage.includes("phong ve") ||
+      normalizedMessage.includes("thong ke") ||
+      normalizedMessage.includes("kpi") ||
+      normalizedMessage.includes("tai chinh") ||
+      normalizedMessage.includes("thu nhap")
+    ) {
+      const dailyReport = this.adminAnalyticsAgent.generateDailyReport(new Date());
+      const revenueAnalysis = this.adminAnalyticsAgent.analyzeRevenueByMovie();
+      const topMovies = (revenueAnalysis.breakdown || []).slice(0, 3);
+
+      return {
+        intent: "SALES_REPORT",
+        confidence: 0.99,
+        replyText: `📊 **BÁO CÁO DOANH SỐ & TÌNH HÌNH KINH DOANH CGV** (${dailyReport.reportDate}):\n\n` +
+          `💰 **Doanh thu hôm nay:** **${dailyReport.kpi.totalRevenue.toLocaleString("vi-VN")} VNĐ** (${dailyReport.kpi.revenueFormatted})\n` +
+          `🎟️ **Tổng vé đã bán:** **${dailyReport.kpi.totalTickets} vé**\n` +
+          `📈 **Tỷ lệ lấp đầy phòng chiếu:** **${dailyReport.kpi.avgOccupancyRate}%** (${dailyReport.kpi.avgOccupancyLabel})\n\n` +
+          `🏆 **Top 3 Phim Dẫn Đầu Doanh Số:**\n` +
+          `1. 🥇 **${topMovies[0]?.title || 'Dune 2'}** — ${topMovies[0]?.revenueFormatted || '91.8M đ'} (${topMovies[0]?.tickets || 612} vé · ${topMovies[0]?.marketShare || '38.2%'})\n` +
+          `2. 🥈 **${topMovies[1]?.title || 'Mai'}** — ${topMovies[1]?.revenueFormatted || '46.1M đ'} (${topMovies[1]?.tickets || 384} vé · ${topMovies[1]?.marketShare || '19.2%'})\n` +
+          `3. 🥉 **${topMovies[2]?.title || 'Oppenheimer'}** — ${topMovies[2]?.revenueFormatted || '43.6M đ'} (${topMovies[2]?.tickets || 298} vé · ${topMovies[2]?.marketShare || '18.2%'})\n\n` +
+          `💡 **Khuyến nghị vận hành:** ${dailyReport.recommendedActions[0] || 'Tối ưu suất chiếu giờ cao điểm tối nay.'}\n\n` +
+          `Anh/chị có muốn xem chi tiết suất chiếu hay cần em hỗ trợ đặt vé phim nào không ạ?`,
+        action: "SHOW_REVENUE_REPORT",
+        revenueData: {
+          totalRevenue: dailyReport.kpi.totalRevenue,
+          revenueFormatted: dailyReport.kpi.revenueFormatted,
+          totalTickets: dailyReport.kpi.totalTickets,
+          avgOccupancyRate: dailyReport.kpi.avgOccupancyRate,
+          topPerformer: dailyReport.topPerformer,
+          topMovies
+        },
+        suggestedQuestions: [
+          "Đặt vé phim Dune 2 ngay",
+          "Dự báo khung giờ cao điểm",
+          "Giá vé các phòng chiếu IMAX",
+          "Các combo bắp nước hôm nay"
+        ]
+      };
+    }
+
+    // Intent 2: Phim bán chạy nhất / Quán quân phòng vé
+    if (
+      normalizedMessage.includes("ban chay") ||
+      normalizedMessage.includes("hot nhat") ||
+      normalizedMessage.includes("top phim") ||
+      normalizedMessage.includes("xem nhieu") ||
+      normalizedMessage.includes("phim quan quan") ||
+      normalizedMessage.includes("phim nao hay nhat")
+    ) {
+      const revenueAnalysis = this.adminAnalyticsAgent.analyzeRevenueByMovie();
+      const topMovies = (revenueAnalysis.breakdown || []).slice(0, 3);
+      const topMovie = topMovies[0];
+
+      return {
+        intent: "TOP_SELLING_MOVIES",
+        confidence: 0.98,
+        replyText: `🏆 **BẢNG XẾP HẠNG PHIM BÁN CHẠY NHẤT RẠP CGV HIỆN TẠI:**\n\n` +
+          `🥇 **Quán quân:** **${topMovie.title}** với **${topMovie.tickets} vé** đã bán ra (${topMovie.revenueFormatted}, chiếm ${topMovie.marketShare} thị phần phòng vé).\n\n` +
+          `🥈 **Á quân:** **${topMovies[1]?.title}** (${topMovies[1]?.tickets} vé · ${topMovies[1]?.revenueFormatted})\n` +
+          `🥉 **Top 3:** **${topMovies[2]?.title}** (${topMovies[2]?.tickets} vé · ${topMovies[2]?.revenueFormatted})\n\n` +
+          `Anh/chị có muốn đặt vé trải nghiệm bộ phim bom tấn **${topMovie.title}** ngay hôm nay không ạ?`,
+        action: "SHOW_BOOKING_CARD",
+        suggestedAction: { type: "BOOKING_MODAL", movieId: topMovie.movieId },
+        suggestedMovies: movies.filter(m => topMovies.some(tm => tm.movieId === m.id)).slice(0, 3),
+        suggestedQuestions: [
+          `Đặt vé phim ${topMovie.title}`,
+          "Báo cáo doanh số rạp hôm nay",
+          "Dự báo khung giờ cao điểm",
+          "Combo bắp nước ưu đãi"
+        ]
+      };
+    }
+
+    // Intent 3: Cảm ơn / Đánh giá tốt
+    if (
+      normalizedMessage.includes("cam on") ||
+      normalizedMessage.includes("thanks") ||
+      normalizedMessage.includes("thank you") ||
+      normalizedMessage.includes("tuyet voi") ||
+      normalizedMessage.includes("hay qua") ||
+      normalizedMessage.includes("gioi qua") ||
+      normalizedMessage.includes("ok em")
+    ) {
+      return {
+        intent: "THANK_YOU",
+        confidence: 0.98,
+        replyText: "Dạ không có chi ạ! Rất vui được đồng hành và hỗ trợ anh/chị. Chúc anh/chị có những phút giây xem phim thật bùng nổ và thư giãn tại cụm rạp CGV Cinemas nhé! ❤️🍿",
+        suggestedQuestions: [
+          "Báo cáo doanh số hôm nay",
+          "Gợi ý phim hot cuối tuần",
+          "Giá vé các phòng chiếu IMAX",
+          "Đặt vé phim Dune 2"
+        ]
+      };
+    }
+
+    // Intent 4: Giờ mở cửa & Vị trí cụm rạp
+    if (
+      normalizedMessage.includes("mo cua") ||
+      normalizedMessage.includes("may gio") ||
+      normalizedMessage.includes("dia chi") ||
+      normalizedMessage.includes("rap o dau") ||
+      normalizedMessage.includes("o dau")
+    ) {
+      return {
+        intent: "THEATER_INFO",
+        confidence: 0.97,
+        replyText: "🎬 **Cụm rạp CGV Cultureplex Vincom Landmark 81** mở cửa đón khách từ **08:30 sáng đến 01:00 sáng hôm sau** tất cả các ngày trong tuần (kể cả Lễ, Tết).\n\n" +
+          "📍 Địa chỉ: Tầng B1, TTTM Vincom Landmark 81, 720A Điện Biên Phủ, Phường 22, Bình Thạnh, TP.HCM.\n" +
+          "Hệ thống phòng chiếu bao gồm: **IMAX Laser, 4DX Dynamic, ScreenX 270° và Gold Class VIP** cao cấp!",
+        suggestedQuestions: [
+          "Báo cáo doanh số hôm nay",
+          "Giá vé phòng chiếu IMAX",
+          "Đặt 2 vé phim Dune 2",
+          "Combo bắp nước"
+        ]
+      };
+    }
+
+    // Intent 5: Dự báo nhu cầu & Giờ cao điểm
+    if (
+      normalizedMessage.includes("du bao") ||
+      normalizedMessage.includes("gio cao diem") ||
+      normalizedMessage.includes("khung gio dong") ||
+      normalizedMessage.includes("luc nao vang")
+    ) {
+      const forecast = this.adminAnalyticsAgent.predictPeakHours(new Date().getDay());
+      const peakSlot = forecast.forecast.find(f => f.isPeakHour) || forecast.forecast[2];
+      const lowSlot = forecast.forecast.find(f => f.tier === "LOW") || forecast.forecast[0];
+
+      return {
+        intent: "PEAK_HOUR_FORECAST",
+        confidence: 0.98,
+        replyText: `📈 **DỰ BÁO NHU CẦU & KHUNG GIỜ RẠP (${forecast.dayLabel}):**\n\n` +
+          `🔥 **Khung giờ cao điểm:** **${peakSlot.timeslot}** (Lấp đầy dự kiến ~${peakSlot.predictedOccupancy}%, lượng khách rất đông, nên đặt vé sớm).\n\n` +
+          `☕ **Khung giờ xem thoải mái:** **${lowSlot.timeslot}** (Lấp đầy ~${lowSlot.predictedOccupancy}%, chỗ ngồi đẹp và thoáng mát).\n\n` +
+          `Anh/chị muốn đặt vé vào khung giờ nào để em hỗ trợ giữ chỗ tốt nhất ạ?`,
+        suggestedQuestions: [
+          "Đặt vé suất 19:30 tối nay",
+          "Báo cáo doanh số hôm nay",
+          "Phim nào bán chạy nhất?",
+          "Giá vé phòng IMAX"
+        ]
+      };
+    }
+
+    // Intent 6: Chào hỏi tương tác thân thiện
+    if (
+      normalizedMessage.includes("chao") ||
+      /\b(hi|hello|helo|alo)\b/.test(normalizedMessage) ||
+      normalizedMessage.includes("ban la ai") ||
+      normalizedMessage.includes("co ai khong")
+    ) {
+      return {
+        intent: "GREETING",
+        confidence: 0.95,
+        replyText: "Dạ em chào anh/chị! 👋 Em là **Trợ lý Trí Tuệ Nhân Tạo CGV 24/7**.\n\n" +
+          "Em có thể hỗ trợ anh/chị ngay lập tức:\n" +
+          "📊 **Báo cáo doanh số & thị phần phòng vé**\n" +
+          "🏆 **Tra cứu top phim bán chạy nhất**\n" +
+          "🎬 **Gợi ý phim bom tấn theo gu cá nhân**\n" +
+          "🎟️ **Tra cứu lịch chiếu & đặt vé trực tuyến**\n" +
+          "💰 **Bảng giá vé IMAX, VIP & Combo bắp nước**\n\n" +
+          "Hôm nay anh/chị cần em hỗ trợ nội dung gì ạ?",
+        suggestedQuestions: [
+          "Báo cáo doanh số hôm nay",
+          "Phim nào bán chạy nhất?",
+          "Gợi ý phim hot cuối tuần",
+          "Đặt vé phim Dune 2"
+        ]
+      };
+    }
+
     // Intent: Hoàn vé / Hỗ trợ khách hàng
     if (normalizedMessage.includes("hoan ve") || normalizedMessage.includes("huy ve") || normalizedMessage.includes("tra ve")) {
       const bookingCodeMatch = normalizedMessage.match(/bkg-\d+/i);

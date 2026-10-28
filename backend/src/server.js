@@ -1,7 +1,8 @@
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "../.env") });
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 
 const { movies, showtimes, defaultSeats, combos, cinemas, rooms, users, bookings } = require("./data/mockData");
 const seatLockService = require("./services/seatLockService");
@@ -18,7 +19,14 @@ const PORT = process.env.PORT || 5000;
 const ROLE_PERMISSIONS = {
   CUSTOMER: ["movies.read", "bookings.create", "recommendations.read", "profile.manage"],
   STAFF: ["movies.read", "bookings.create", "bookings.read", "bookings.scan", "support.manage"],
-  ADMIN: ["movies.read", "movies.manage", "bookings.read", "bookings.scan", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage", "users.manage", "system.manage"]
+  ADMIN: [
+    "movies.read", "movies.manage",
+    "bookings.create", "bookings.read", "bookings.scan",
+    "showtimes.manage", "rooms.manage",
+    "analytics.read", "ai.manage",
+    "users.manage", "system.manage",
+    "support.manage", "recommendations.read", "profile.manage"
+  ]
 };
 // Tương thích ngược: MANAGER tự động ánh xạ quyền của STAFF
 ROLE_PERMISSIONS.MANAGER = ROLE_PERMISSIONS.STAFF;
@@ -35,13 +43,24 @@ function requirePermission(permission) {
 
     const authHeader = req.header("authorization") || req.header("Authorization");
     if (authHeader) {
-      const user = authService.verifyToken(authHeader);
-      if (user) {
-        role = (user.role || "CUSTOMER").toUpperCase();
-        currentUser = user;
+      currentUser = authService.verifyToken(authHeader);
+      if (currentUser) {
+        role = (currentUser.role || "CUSTOMER").toUpperCase();
       }
-    } else if (req.header("x-demo-role")) {
-      role = req.header("x-demo-role").toUpperCase();
+    }
+
+    // Fallback: nếu chưa xác định được user từ token (ví dụ server vừa khởi động lại làm mới in-memory session)
+    // Ưu tiên khôi phục role từ header x-demo-role nếu client gửi
+    if (!currentUser && req.header("x-demo-role")) {
+      const demoRole = req.header("x-demo-role").toUpperCase();
+      if (ROLE_PERMISSIONS[demoRole]) {
+        role = demoRole;
+        if (role === "ADMIN") {
+          currentUser = users.find(u => u.role === "ADMIN") || null;
+        } else if (role === "STAFF" || role === "MANAGER") {
+          currentUser = users.find(u => u.role === "STAFF") || null;
+        }
+      }
     }
 
     if (!ROLE_PERMISSIONS[role] || !ROLE_PERMISSIONS[role].includes(permission)) {
@@ -90,7 +109,23 @@ app.get("/api/v1/auth/me", (req, res) => {
   if (!authHeader) {
     return res.status(401).json({ status: "UNAUTHORIZED", message: "Chưa đăng nhập." });
   }
-  const user = authService.verifyToken(authHeader);
+  let user = authService.verifyToken(authHeader);
+  if (!user && req.header("x-demo-role")) {
+    const demoRole = req.header("x-demo-role").toUpperCase();
+    if (demoRole === "ADMIN") {
+      const admin = users.find(u => u.role === "ADMIN");
+      if (admin) {
+        const { password: _, ...safe } = admin;
+        user = safe;
+      }
+    } else if (demoRole === "STAFF" || demoRole === "MANAGER") {
+      const staff = users.find(u => u.role === "STAFF");
+      if (staff) {
+        const { password: _, ...safe } = staff;
+        user = safe;
+      }
+    }
+  }
   if (!user) {
     return res.status(401).json({ status: "UNAUTHORIZED", message: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn." });
   }
@@ -389,9 +424,17 @@ app.post("/api/v1/bookings/check-in", requirePermission("bookings.scan"), (req, 
   }
 
   if (booking.status === "CHECKED_IN") {
+    const movie = movies.find(m => m.id === booking.movieId);
     return res.status(400).json({
       status: "ALREADY_CHECKED_IN",
-      message: `Vé ${booking.bookingCode} đã được soát vé vào rạp lúc ${booking.checkedInAt ? new Date(booking.checkedInBy ? booking.checkedInAt : booking.checkedInAt).toLocaleString("vi-VN") : "trước đó"}. Không thể tái sử dụng!`
+      message: `Vé ${booking.bookingCode} đã được soát vé vào rạp lúc ${booking.checkedInAt ? new Date(booking.checkedInAt).toLocaleString("vi-VN") : "trước đó"}. Không thể tái sử dụng!`,
+      data: {
+        bookingCode: booking.bookingCode,
+        movieTitle: movie ? movie.title : "Phim chiếu rạp",
+        seats: booking.seats,
+        checkedInAt: booking.checkedInAt,
+        checkedInBy: booking.checkedInBy
+      }
     });
   }
 
@@ -411,6 +454,7 @@ app.post("/api/v1/bookings/check-in", requirePermission("bookings.scan"), (req, 
   const movie = movies.find(m => m.id === booking.movieId);
   const showtime = showtimes.find(st => st.id === booking.showtimeId);
   const room = showtime ? rooms.find(r => r.id === showtime.roomId) : null;
+  const user = users.find(u => u.id === booking.userId);
 
   res.json({
     status: "SUCCESS",
@@ -418,12 +462,69 @@ app.post("/api/v1/bookings/check-in", requirePermission("bookings.scan"), (req, 
     data: {
       bookingCode: booking.bookingCode,
       movieTitle: movie ? movie.title : "Phim chiếu rạp",
+      moviePoster: movie ? movie.poster : "",
       showtimeStart: showtime ? showtime.startTime : "",
       roomName: room ? room.name : "Phòng chiếu",
       seats: booking.seats,
+      customerName: user ? user.name : "Khách hàng CGV",
+      customerTier: user ? user.memberTier : "MEMBER",
+      total: booking.total,
       checkedInAt: booking.checkedInAt,
       checkedInBy: booking.checkedInBy
     }
+  });
+});
+
+// Hoàn tác / Reset trạng thái soát vé về PAID (Hỗ trợ Demo thử nghiệm nhiều lần)
+app.post("/api/v1/bookings/reset-check-in", requirePermission("bookings.scan"), (req, res) => {
+  const { code } = req.body;
+  if (!code) {
+    return res.status(400).json({ status: "ERROR", message: "Vui lòng cung cấp mã vé cần hoàn tác." });
+  }
+
+  const cleanCode = String(code).trim().toUpperCase();
+  const booking = bookings.find(b =>
+    (b.bookingCode && b.bookingCode.toUpperCase() === cleanCode) ||
+    (b.qrToken && b.qrToken.toUpperCase() === cleanCode)
+  );
+
+  if (!booking) {
+    return res.status(404).json({ status: "ERROR", message: `Không tìm thấy vé với mã "${code}".` });
+  }
+
+  booking.status = "PAID";
+  delete booking.checkedInAt;
+  delete booking.checkedInBy;
+  dbService.resetBookingCheckIn(booking.bookingCode).catch(e => console.warn("Lỗi reset MySQL:", e.message));
+
+  res.json({
+    status: "SUCCESS",
+    message: `Đã hoàn tác vé ${booking.bookingCode} về trạng thái "Chờ soát vé" (PAID).`,
+    data: { bookingCode: booking.bookingCode, status: "PAID" }
+  });
+});
+
+// Tạo nhanh vé demo mới chưa soát vé để test ngay lập tức
+app.post("/api/v1/bookings/create-demo-ticket", requirePermission("bookings.scan"), (req, res) => {
+  const sampleCodes = ["BKG-" + Math.floor(100000 + Math.random() * 900000)];
+  const newCode = sampleCodes[0];
+  const newBooking = {
+    bookingCode: newCode,
+    qrToken: "CGV-TICKET-" + newCode + "-XYZ",
+    userId: "user_guest",
+    movieId: "mov-01",
+    showtimeId: "st-101",
+    seats: ["C" + Math.floor(1 + Math.random() * 8), "C" + Math.floor(9 + Math.random() * 4)],
+    total: 350000,
+    status: "PAID",
+    bookedAt: new Date().toISOString()
+  };
+
+  bookings.unshift(newBooking);
+  res.status(201).json({
+    status: "SUCCESS",
+    message: `Đã khởi tạo thành công đơn vé ${newCode}.`,
+    data: newBooking
   });
 });
 
@@ -651,6 +752,17 @@ app.post("/api/v1/support/refund", (req, res) => {
   }
   const result = aiService.customerServiceAgent.handleRefundRequest(bookingCode, reason || "", customerInfo || {});
   const httpStatus = result.success ? 200 : 404;
+  if (result.success && result.approved) {
+    const cleanCode = String(bookingCode).trim().toUpperCase();
+    const booking = bookings.find(b => (b.bookingCode && b.bookingCode.toUpperCase() === cleanCode) || (b.id && b.id.toUpperCase() === cleanCode));
+    if (booking) {
+      booking.status = "REFUNDED";
+      booking.refundedAt = new Date().toISOString();
+      if (booking.showtimeId && Array.isArray(booking.seats)) {
+        seatLockService.releaseBookedSeats(booking.showtimeId, booking.seats);
+      }
+    }
+  }
   res.status(httpStatus).json({ status: result.success ? "SUCCESS" : "ERROR", agent: "CustomerServiceAgent_v1", data: result });
 });
 
@@ -760,6 +872,7 @@ app.patch("/api/v1/admin/movies/:id", requirePermission("movies.manage"), (req, 
   const movie = movies.find(m => m.id === req.params.id);
   if (!movie) return res.status(404).json({ status: "ERROR", message: "Không tìm thấy phim." });
   Object.assign(movie, req.body);
+  dbService.updateMovie(movie.id, movie).catch(e => console.warn("Lỗi cập nhật phim MySQL:", e.message));
   res.json({ status: "SUCCESS", data: movie, message: "Đã cập nhật trạng thái phim." });
 });
 
@@ -1037,13 +1150,62 @@ app.get("/api/v1/admin/ai-health", requirePermission("ai.manage"), (req, res) =>
   });
 });
 
-// Khởi chạy server
-app.listen(PORT, async () => {
-  console.log(`====================================================`);
-  console.log(` 🎬 CGV Cultureplex Cinema Management — Port ${PORT}`);
-  console.log(`    http://localhost:${PORT}`);
-  console.log(` 🎟️ Thanh Đặt Vé Nhanh & Phân Trang Khách Hàng / Admin`);
-  console.log(` 👑 Thẻ Thành Viên CGV Membership & Phân Quyền RBAC`);
-  console.log(`====================================================`);
-  await database.testConnection();
-});
+/**
+ * Đồng bộ dữ liệu mới nhất từ MySQL Server vào bộ nhớ (Memory Cache)
+ * Đảm bảo mọi thay đổi (thêm/sửa/xóa phim, suất chiếu, vé) lưu vĩnh viễn khi tắt/mở lại server
+ */
+async function syncFromDatabase() {
+  if (database.isMySqlConnected()) {
+    try {
+      const dbMovies = await dbService.getMovies();
+      if (dbMovies && dbMovies.length > 0) {
+        movies.splice(0, movies.length, ...dbMovies);
+        console.log(`🎬 Đã đồng bộ ${dbMovies.length} phim từ MySQL Server vào hệ thống.`);
+      }
+      const dbShowtimes = await dbService.getShowtimes();
+      if (dbShowtimes && dbShowtimes.length > 0) {
+        showtimes.splice(0, showtimes.length, ...dbShowtimes);
+      }
+      const dbUsers = await dbService.getUsers();
+      if (dbUsers && dbUsers.length > 0) {
+        users.splice(0, users.length, ...dbUsers);
+      }
+      const dbBookings = await dbService.getBookings();
+      if (dbBookings && dbBookings.length > 0) {
+        bookings.splice(0, bookings.length, ...dbBookings);
+      }
+    } catch (err) {
+      console.warn("⚠️ Lỗi đồng bộ dữ liệu từ MySQL:", err.message);
+    }
+  }
+}
+
+// Khởi chạy server với cơ chế tự động chuyển cổng an toàn (Port Auto-failover)
+const startServer = (portToTry) => {
+  const srv = app.listen(portToTry, async () => {
+    console.log(`====================================================`);
+    console.log(` 🎬 CGV Cultureplex Cinema Management — Port ${portToTry}`);
+    console.log(`    http://localhost:${portToTry}`);
+    console.log(` 🎟️ Thanh Đặt Vé Nhanh & Phân Trang Khách Hàng / Admin`);
+    console.log(` 👑 Thẻ Thành Viên CGV Membership & Phân Quyền RBAC`);
+    console.log(`====================================================`);
+    await database.testConnection();
+    await syncFromDatabase();
+  });
+
+  srv.on("error", (err) => {
+    if ((err.code === "EADDRINUSE" || err.code === "EACCES") && portToTry === 5000) {
+      console.warn(`⚠️ Cổng 5000 bị hạn chế bởi hệ thống (${err.code}). Đang tự động chuyển sang cổng 5005...`);
+      startServer(5005);
+    } else {
+      console.error("Lỗi khởi động server:", err.message);
+    }
+  });
+
+  return srv;
+};
+
+startServer(PORT);
+
+
+module.exports = app;
