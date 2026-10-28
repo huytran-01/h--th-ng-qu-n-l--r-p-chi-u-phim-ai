@@ -5,6 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
+    "test": "node ../tests/test_rbac_matrix.js",
     "db:init": "node database/initDb.js"
   },
   "dependencies": {

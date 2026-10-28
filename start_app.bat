@@ -1,22 +1,41 @@
 @echo off
 chcp 65001 > nul
-title HE THONG QUAN LY RAP CHIEU PHIM TICH HOP AI
+title 🎬 HE THONG QUAN LY RAP CHIEU PHIM AI (CGV)
+
 echo ======================================================================
 echo    HE THONG QUAN LY RAP CHIEU PHIM TICH HOP TRI TUE NHAN TAO (AI)
 echo ======================================================================
 echo.
-echo [1/2] Dang khoi dong Backend API va Dinh tuyen Frontend...
+
 cd /d "%~dp0backend"
-start "AI Cinema Backend Server" cmd /k "node src/server.js"
-timeout /t 2 > nul
-echo.
-echo [2/2] Mo giao dien Web tren trinh duyet mac dinh...
-start http://localhost:5000
+
+:: 1. Kiem tra file cau hinh .env
+if not exist ".env" (
+    echo [1/3] Khoi tao file cau hinh .env tu .env.example...
+    copy ".env.example" ".env" > nul
+)
+
+:: 2. Kiem tra thu vien dependencies
+if not exist "node_modules" (
+    echo [2/3] Dang cai dat thu vien can thiet (npm install)...
+    call npm install
+)
+
 echo.
 echo ======================================================================
-echo  He thong da khoi dong thanh cong tai: http://localhost:5000
-echo  - Giao dien nguoi dung: http://localhost:5000
-echo  - Backend API: http://localhost:5000/api/v1/movies
-echo  - Trợ lý ảo Chatbot AI 24/7 o goc phai man hinh
+echo  [3/3] Dang khoi dong Backend API va mo trinh duyet...
+echo.
+echo  🌐 Dia chi website: http://localhost:5000
+echo  🎬 Tro ly ao Chatbot AI 24/7 o goc phai man hinh
+echo.
+echo  ⚠️  CHU Y: VUI LONG GIU CUA SO NAY MO TRONG SUOT QUA TRINH SU DUNG!
+echo  (Neu tat cua so nay, website se bi loi "localhost tu choi ket noi")
+echo  Nhan [Ctrl + C] neu ban muon dung server.
 echo ======================================================================
-pause
+echo.
+
+:: Mo trinh duyet sau 2 giay khi server da san sang
+start "" cmd /c "timeout /t 2 > nul && start http://localhost:5000"
+
+:: Chay server truc tiep tai cua so nay de hien thi log thoi gian thuc
+node src/server.js

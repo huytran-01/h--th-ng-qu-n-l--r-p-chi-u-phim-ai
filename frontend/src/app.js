@@ -172,19 +172,20 @@ function updateAuthUI() {
       canAdmin: false
     },
     STAFF: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canStaff: true, canAdmin: false },
-    MANAGER: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canStaff: true, canAdmin: false },
-    ADMIN: { label: "Quản trị viên", badgeClass: "bg-red-950 text-red-400 border-red-800", icon: "fa-shield", canStaff: true, canAdmin: true }
+    MANAGER: { label: "Quản trị viên (Manager)", badgeClass: "bg-red-950 text-red-400 border-red-800", icon: "fa-shield", canStaff: true, canAdmin: true },
+    ADMIN: { label: "Quản trị viên (Manager)", badgeClass: "bg-red-950 text-red-400 border-red-800", icon: "fa-shield", canStaff: true, canAdmin: true }
   };
 
-  const config = roleConfigs[currentUser.role] || roleConfigs.CUSTOMER;
+  const currentRole = (currentUser.role || "CUSTOMER").toUpperCase();
+  const config = roleConfigs[currentRole] || roleConfigs.CUSTOMER;
   if (roleEl) roleEl.innerHTML = `<i class="fa-solid ${config.icon} mr-1"></i>${config.label}`;
   if (dropdownRoleBadge) {
-    dropdownRoleBadge.textContent = currentUser.role === "CUSTOMER" ? `CGV ${tier}` : currentUser.role;
+    dropdownRoleBadge.textContent = currentRole === "CUSTOMER" ? `CGV ${tier}` : (currentRole === "ADMIN" ? "MANAGER" : currentRole);
     dropdownRoleBadge.className = `px-2 py-0.5 rounded text-[10px] font-bold border ${config.badgeClass}`;
   }
 
   // PHÂN QUYỀN ẨN/HIỆN CHỨC NĂNG THEO VAI TRÒ CHÍNH XÁC:
-  // 1. Phân hệ Nghiệp vụ Nhân viên rạp (STAFF & ADMIN)
+  // 1. Phân hệ Nghiệp vụ Nhân viên rạp (STAFF & MANAGER)
   if (config.canStaff) {
     if (navStaffLink) {
       navStaffLink.classList.remove("hidden");
@@ -205,7 +206,7 @@ function updateAuthUI() {
     }
   }
 
-  // 2. Phân hệ Quản trị Hệ thống (CHỈ ADMIN)
+  // 2. Phân hệ Quản trị Hệ thống (CHỈ MANAGER / ADMIN)
   if (config.canAdmin) {
     if (navAdminLink) {
       navAdminLink.classList.remove("hidden");
@@ -228,13 +229,104 @@ function updateAuthUI() {
 
   const adminTag = document.getElementById("admin-current-user-tag");
   if (adminTag) {
-    adminTag.innerHTML = `<i class="fa-solid fa-user-shield text-cgv-red mr-1.5"></i>${currentUser.name} (${currentUser.role})`;
+    adminTag.innerHTML = `<i class="fa-solid fa-user-shield text-cgv-red mr-1.5"></i>${currentUser.name} (${currentRole})`;
   }
 
   const staffTag = document.getElementById("staff-user-tag");
   if (staffTag) {
-    staffTag.innerHTML = `<i class="fa-solid fa-user-check mr-2 text-green-400"></i>${currentUser.name} (${currentUser.role})`;
+    staffTag.innerHTML = `<i class="fa-solid fa-user-check mr-2 text-green-400"></i>${currentUser.name} (${currentRole})`;
   }
+
+  // Áp dụng rào chắn giao diện theo vai trò người dùng (RBAC Frontend Guardrails)
+  applyRoleUI(currentRole);
+}
+
+/**
+ * RÀO CHẮN AN TOÀN FRONTEND:
+ * - TUYỆT ĐỐI CHỈ CÓ CUSTOMER MỚI CÓ QUYỀN ĐẶT VÉ VÀ THANH TOÁN.
+ * - STAFF VÀ MANAGER: Ẩn toàn bộ nút "Mua Vé Ngay", widget "Đặt Vé Nhanh", gợi ý AI và màn hình thanh toán.
+ */
+function applyRoleUI(role) {
+  const currentRole = (role || (currentUser && currentUser.role) || "CUSTOMER").toUpperCase();
+  const isCustomer = currentRole === "CUSTOMER";
+
+  // Lưu trữ vai trò vào localStorage
+  const normalizedRole = currentRole === "ADMIN" ? "MANAGER" : currentRole;
+  localStorage.setItem("cgv_role", normalizedRole);
+  localStorage.setItem("aiCinemaRole", normalizedRole);
+
+  // 1. Widget "Đặt Vé Nhanh" (Quick Booking Bar)
+  const quickBookingSection = document.getElementById("quick-booking-section");
+  if (quickBookingSection) {
+    if (isCustomer) {
+      quickBookingSection.classList.remove("hidden");
+      quickBookingSection.style.display = "";
+    } else {
+      quickBookingSection.classList.add("hidden");
+      quickBookingSection.style.display = "none";
+    }
+  }
+
+  // 2. Nút "Mua Vé Ngay" trên Banner chính
+  const bannerBuyBtn = document.getElementById("banner-buy-ticket-btn");
+  if (bannerBuyBtn) {
+    if (isCustomer) {
+      bannerBuyBtn.classList.remove("hidden");
+      bannerBuyBtn.style.display = "";
+    } else {
+      bannerBuyBtn.classList.add("hidden");
+      bannerBuyBtn.style.display = "none";
+    }
+  }
+
+  // 3. Khối Gợi Ý Phim Thông Minh AI (Recommendation Section)
+  const aiRecSection = document.getElementById("ai-recommendation-section");
+  if (aiRecSection) {
+    if (isCustomer) {
+      aiRecSection.classList.remove("hidden");
+      aiRecSection.style.display = "";
+    } else {
+      aiRecSection.classList.add("hidden");
+      aiRecSection.style.display = "none";
+    }
+  }
+
+  // 4. Đóng modal đặt vé và modal thanh toán nếu tài khoản không phải CUSTOMER
+  const bookingModal = document.getElementById("booking-modal");
+  if (bookingModal && !isCustomer && !bookingModal.classList.contains("hidden")) {
+    closeBookingModal();
+  }
+
+  // 5. Cập nhật lại các nút mua vé trên danh sách phim
+  renderCurrentMoviesRoleButtons();
+}
+
+/**
+ * Cập nhật hiển thị nút Mua vé trên danh sách phim theo vai trò
+ */
+function renderCurrentMoviesRoleButtons() {
+  const isCustomer = !currentUser || currentUser.role === "CUSTOMER";
+  const bookingButtons = document.querySelectorAll(".movie-card-buy-btn");
+  bookingButtons.forEach(btn => {
+    if (isCustomer) {
+      btn.style.display = "";
+      btn.classList.remove("hidden");
+    } else {
+      btn.style.display = "none";
+      btn.classList.add("hidden");
+    }
+  });
+
+  const staffNotices = document.querySelectorAll(".movie-card-staff-notice");
+  staffNotices.forEach(notice => {
+    if (isCustomer) {
+      notice.style.display = "none";
+      notice.classList.add("hidden");
+    } else {
+      notice.style.display = "flex";
+      notice.classList.remove("hidden");
+    }
+  });
 }
 
 function openAuthModal(tab = "login") {
@@ -285,16 +377,20 @@ async function handleLoginSubmit(event) {
     if (json.status === "SUCCESS") {
       authToken = json.token;
       currentUser = json.user;
+      const role = (currentUser.role || "CUSTOMER").toUpperCase();
+      const normalizedRole = role === "ADMIN" ? "MANAGER" : role;
       localStorage.setItem("aiCinemaToken", authToken);
       localStorage.setItem("aiCinemaUser", JSON.stringify(currentUser));
+      localStorage.setItem("cgv_role", normalizedRole);
+      localStorage.setItem("aiCinemaRole", normalizedRole);
       closeAuthModal();
       updateAuthUI();
       showToast(json.message || "Đăng nhập thành công!", "success");
-      if (currentUser.role === "STAFF") {
+      if (normalizedRole === "STAFF") {
         showToast(`Chào mừng Nhân viên rạp ${currentUser.name}. Bạn đang ở trang Nghiệp vụ Soát vé.`, "info");
         switchView("staff");
-      } else if (currentUser.role === "ADMIN") {
-        showToast(`Chào mừng Quản trị viên ${currentUser.name}. Bạn có toàn quyền quản trị hệ thống.`, "info");
+      } else if (normalizedRole === "MANAGER") {
+        showToast(`Chào mừng Quản trị viên (Manager) ${currentUser.name}. Bạn có toàn quyền quản trị hệ thống.`, "info");
         switchView("admin");
       } else {
         switchView("home");
@@ -349,18 +445,22 @@ async function quickLogin(email, password, notify = true) {
     if (json.status === "SUCCESS") {
       authToken = json.token;
       currentUser = json.user;
+      const role = (currentUser.role || "CUSTOMER").toUpperCase();
+      const normalizedRole = role === "ADMIN" ? "MANAGER" : role;
       localStorage.setItem("aiCinemaToken", authToken);
       localStorage.setItem("aiCinemaUser", JSON.stringify(currentUser));
+      localStorage.setItem("cgv_role", normalizedRole);
+      localStorage.setItem("aiCinemaRole", normalizedRole);
       closeAuthModal();
       updateAuthUI();
-      if (currentUser.role === "STAFF") {
+      if (normalizedRole === "STAFF") {
         switchView("staff");
-      } else if (currentUser.role === "ADMIN") {
+      } else if (normalizedRole === "MANAGER") {
         switchView("admin");
       } else {
         switchView("home");
       }
-      const roleTitle = currentUser.role === "ADMIN" ? "Quản trị viên" : currentUser.role === "STAFF" ? "Nhân viên rạp" : "Khách hàng";
+      const roleTitle = normalizedRole === "MANAGER" ? "Quản trị viên (Manager)" : normalizedRole === "STAFF" ? "Nhân viên rạp" : "Khách hàng";
       if (notify) showToast(`Đã chuyển sang tài khoản: ${currentUser.name} (${roleTitle})`, "success");
     }
   } catch (err) {
@@ -382,6 +482,8 @@ async function handleLogout(notify = true) {
   currentUser = null;
   localStorage.removeItem("aiCinemaToken");
   localStorage.removeItem("aiCinemaUser");
+  localStorage.removeItem("cgv_role");
+  localStorage.removeItem("aiCinemaRole");
   closeUserDropdown();
   updateAuthUI();
   switchView("home");
@@ -433,10 +535,10 @@ function switchView(viewName) {
     return;
   }
 
-  // 2. Phân hệ Quản trị Hệ thống (CHỈ QUẢN TRỊ VIÊN ADMIN)
+  // 2. Phân hệ Quản trị Hệ thống (CHỈ DÀNH CHO MANAGER / ADMIN)
   if (viewName === "admin") {
-    if (!currentUser || currentUser.role !== "ADMIN") {
-      showToast("Chức năng Quản Trị Hệ Thống chỉ dành riêng cho Quản trị viên (ADMIN)!", "error");
+    if (!currentUser || !["ADMIN", "MANAGER"].includes(currentUser.role)) {
+      showToast("Chức năng Quản Trị Hệ Thống chỉ dành riêng cho Quản trị viên (MANAGER)!", "error");
       switchView("home");
       return;
     }
@@ -498,7 +600,7 @@ function switchView(viewName) {
 }
 
 function updateAdminCapabilities() {
-  const isAdmin = currentUser && currentUser.role === "ADMIN";
+  const isManager = currentUser && ["ADMIN", "MANAGER"].includes(currentUser.role);
   const usersTab = document.getElementById("btn-admin-tab-users");
   const usersPane = document.getElementById("admin-tab-users");
   const moviesTab = document.getElementById("btn-admin-tab-movies");
@@ -506,12 +608,12 @@ function updateAdminCapabilities() {
   const forecastTab = document.getElementById("btn-admin-tab-forecast");
 
   // Với Nhân viên rạp: tập trung soát vé và tra cứu vé
-  if (usersTab) usersTab.classList.toggle("hidden", !isAdmin);
-  if (moviesTab) moviesTab.classList.toggle("hidden", !isAdmin);
-  if (showtimesTab) showtimesTab.classList.toggle("hidden", !isAdmin);
-  if (forecastTab) forecastTab.classList.toggle("hidden", !isAdmin);
+  if (usersTab) usersTab.classList.toggle("hidden", !isManager);
+  if (moviesTab) moviesTab.classList.toggle("hidden", !isManager);
+  if (showtimesTab) showtimesTab.classList.toggle("hidden", !isManager);
+  if (forecastTab) forecastTab.classList.toggle("hidden", !isManager);
 
-  if (!isAdmin && currentAdminTab !== "bookings") {
+  if (!isManager && currentAdminTab !== "bookings") {
     switchAdminTab("bookings");
   }
 }
@@ -591,6 +693,11 @@ async function updateQuickBookingShowtimes() {
 }
 
 function executeQuickBooking() {
+  if (currentUser && ["STAFF", "MANAGER", "ADMIN"].includes(currentUser.role)) {
+    showToast(`⚠️ Tài khoản vai trò '${currentUser.role}' không có nghiệp vụ đặt vé. Nghiệp vụ đặt vé chỉ dành cho Khách hàng (CUSTOMER)!`, "warning");
+    return;
+  }
+
   const movieId = document.getElementById("qb-movie").value;
   const showtimeId = document.getElementById("qb-showtime").value;
 
@@ -682,10 +789,13 @@ function renderCustomerMoviesGrid(moviesList, pagination) {
 
         <div class="mt-3.5 flex items-center space-x-2">
           ${m.status === "NOW_SHOWING" ? `
-            <button onclick="openBookingModal('${m.id}')" class="flex-1 py-2 rounded-xl bg-cgv-red hover:bg-red-700 text-white text-xs font-black transition flex items-center justify-center space-x-1 cgv-glow">
+            <button onclick="openBookingModal('${m.id}')" class="movie-card-buy-btn flex-1 py-2 rounded-xl bg-cgv-red hover:bg-red-700 text-white text-xs font-black transition flex items-center justify-center space-x-1 cgv-glow" style="${(!currentUser || currentUser.role === 'CUSTOMER') ? '' : 'display: none;'}">
               <i class="fa-solid fa-ticket text-xs"></i>
               <span>MUA VÉ</span>
             </button>
+            <span class="movie-card-staff-notice flex-1 py-2 text-center rounded-xl bg-gray-900 border border-gray-800 text-gray-500 text-[10px] font-semibold" style="${(!currentUser || currentUser.role === 'CUSTOMER') ? 'display: none;' : 'display: flex;'} justify-content: center; align-items: center;" title="Staff & Manager không có quyền đặt vé">
+              <i class="fa-solid fa-eye mr-1 text-gray-400"></i>Chỉ xem
+            </span>
           ` : `
             <button onclick="showToast('Phim dự kiến khởi chiếu vào ngày ${m.releaseDate}. Hãy theo dõi lịch chiếu sớm nhất!', 'info')" class="flex-1 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-cgv-gold text-xs font-bold border border-cgv-gold/40 transition">
               <i class="fa-solid fa-bell mr-1"></i>SẮP CHIẾU
@@ -771,9 +881,14 @@ function scrollToCustomerMovies(tab) {
 // ==================== AI RECOMMENDATIONS ==================== //
 
 async function fetchAIRecommendations() {
+  if (currentUser && ["STAFF", "MANAGER", "ADMIN"].includes(currentUser.role)) {
+    return;
+  }
   try {
     const userId = currentUser ? currentUser.id : "user_guest";
-    const res = await fetch(`${API_BASE}/ai/recommendations?userId=${userId}`);
+    const res = await fetch(`${API_BASE}/ai/recommendations?userId=${userId}`, {
+      headers: getAuthHeaders()
+    });
     const json = await res.json();
     if (json.status === "SUCCESS") {
       renderAIRecGrid(json.data.slice(0, 3));
@@ -1711,9 +1826,9 @@ function goToBookingPage(page) {
 async function confirmCheckInTicket(code) {
   showConfirmDeleteModal(`Xác nhận soát vé cho mã ${code}? Khách sẽ được check-in vào phòng chiếu.`, async () => {
     try {
-      const res = await apiFetch(`/bookings/check-in`, {
+      const res = await apiFetch(`/staff/check-in`, {
         method: "POST",
-        body: JSON.stringify({ code })
+        body: JSON.stringify({ ticketCode: code, code })
       });
       const json = await res.json();
       if (json.status === "SUCCESS") {
@@ -1883,9 +1998,9 @@ async function handleStaffQuickCheckIn() {
   }
 
   try {
-    const res = await apiFetch(`/bookings/check-in`, {
+    const res = await apiFetch(`/staff/check-in`, {
       method: "POST",
-      body: JSON.stringify({ code })
+      body: JSON.stringify({ ticketCode: code, code })
     });
     const json = await res.json();
 
@@ -1934,9 +2049,9 @@ async function handleQuickCheckIn() {
     return;
   }
   try {
-    const res = await apiFetch(`/bookings/check-in`, {
+    const res = await apiFetch(`/staff/check-in`, {
       method: "POST",
-      body: JSON.stringify({ code })
+      body: JSON.stringify({ ticketCode: code, code })
     });
     const json = await res.json();
     if (json.status === "SUCCESS") {
@@ -2088,6 +2203,11 @@ function closeConfirmDeleteModal() {
 // ==================== BOOKING MODAL & SEAT MAP ==================== //
 
 async function openBookingModal(movieId) {
+  if (currentUser && ["STAFF", "MANAGER", "ADMIN"].includes(currentUser.role)) {
+    showToast(`⚠️ Tài khoản vai trò '${currentUser.role}' không có quyền đặt vé. Nghiệp vụ đặt vé chỉ dành riêng cho Khách hàng (CUSTOMER)!`, "warning");
+    return;
+  }
+
   selectedMovie = allMovies.find(m => m.id === movieId);
   if (!selectedMovie) return;
 
@@ -2243,13 +2363,17 @@ async function toggleSeatSelect(seatId) {
 }
 
 async function lockSelectedSeats() {
+  if (currentUser && ["STAFF", "MANAGER", "ADMIN"].includes(currentUser.role)) {
+    showToast(`⚠️ Tài khoản vai trò '${currentUser.role}' không có quyền khóa ghế đặt vé!`, "warning");
+    return;
+  }
   if (!selectedSeats.length || !selectedShowtime) return;
   const userId = currentUser ? currentUser.id : "user_guest";
 
   try {
     const res = await fetch(`${API_BASE}/bookings/lock-seats`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         showtimeId: selectedShowtime,
         seatIds: selectedSeats,
@@ -2368,6 +2492,11 @@ function updateOrderSummary() {
 // ---------------- CHECKOUT & DIGITAL CGV TICKET ---------------- //
 
 async function handleCheckout() {
+  if (currentUser && ["STAFF", "MANAGER", "ADMIN"].includes(currentUser.role)) {
+    showToast(`⚠️ Tài khoản vai trò '${currentUser.role}' không có quyền thanh toán đặt vé. Chức năng chỉ dành cho Khách hàng (CUSTOMER)!`, "error");
+    return;
+  }
+
   if (!selectedSeats.length || !selectedShowtime) return;
 
   const checkoutBtn = document.getElementById("checkout-button");
@@ -2393,6 +2522,11 @@ async function handleCheckout() {
       })
     });
     const json = await res.json();
+
+    if (res.status === 403 || json.status === "FORBIDDEN") {
+      showToast(json.message || "Tài khoản của bạn không có quyền thanh toán đặt vé!", "error");
+      return;
+    }
 
     if (json.status === "SUCCESS") {
       closeBookingModal();

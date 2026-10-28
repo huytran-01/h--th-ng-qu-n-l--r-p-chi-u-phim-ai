@@ -13,20 +13,87 @@ const dbService = require("./services/dbService");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Hệ thống phân quyền RBAC (Role-Based Access Control)
-// Chuẩn hóa 3 vai trò chính theo đồ án: CUSTOMER (Khách hàng), STAFF (Nhân viên rạp), ADMIN (Quản trị viên)
+// ==================== HỆ THỐNG PHÂN QUYỀN RBAC (3 VAI TRÒ CHUẨN) ==================== //
+// 1. CUSTOMER: Khách hàng (Được xem phim, Gợi ý AI, Đặt vé, Thanh toán, Xem vé cá nhân)
+// 2. STAFF: Nhân viên rạp (Xem phim, Tra cứu vé, Soát vé check-in QR. TUYỆT ĐỐI KHÔNG ĐƯỢC ĐẶT VÉ)
+// 3. MANAGER: Quản trị viên hệ thống (Toàn quyền quản lý phim, suất chiếu, người dùng, báo cáo AI. TUYỆT ĐỐI KHÔNG ĐƯỢC ĐẶT VÉ)
+// Tương thích ngược: ADMIN là bí danh tương đương của MANAGER.
+
 const ROLE_PERMISSIONS = {
-  CUSTOMER: ["movies.read", "bookings.create", "recommendations.read", "profile.manage"],
-  STAFF: ["movies.read", "bookings.create", "bookings.read", "bookings.scan", "support.manage"],
-  ADMIN: ["movies.read", "movies.manage", "bookings.read", "bookings.scan", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage", "users.manage", "system.manage"]
+  CUSTOMER: ["movies.read", "bookings.create", "recommendations.read", "profile.manage", "tickets.my"],
+  STAFF: ["movies.read", "bookings.read", "bookings.scan", "support.manage"],
+  MANAGER: ["movies.read", "movies.manage", "bookings.read", "bookings.scan", "showtimes.manage", "rooms.manage", "analytics.read", "ai.manage", "users.manage", "system.manage"]
 };
-// Tương thích ngược: MANAGER tự động ánh xạ quyền của STAFF
-ROLE_PERMISSIONS.MANAGER = ROLE_PERMISSIONS.STAFF;
+ROLE_PERMISSIONS.ADMIN = ROLE_PERMISSIONS.MANAGER;
 
 /**
- * Middleware kiểm tra quyền truy cập:
- * Ưu tiên 1: Lấy Token từ header `Authorization: Bearer <token>`
- * Ưu tiên 2 (Fallback demo): Lấy role từ header `x-demo-role`
+ * Middleware kiểm tra vai trò người dùng (Role-Based Access Control - RBAC)
+ * Tuân thủ nghiêm ngặt nguyên tắc cốt lõi:
+ * - TUYỆT ĐỐI CHỈ CÓ CUSTOMER MỚI CÓ QUYỀN ĐẶT VÉ VÀ THANH TOÁN.
+ * - STAFF VÀ MANAGER KHÔNG CÓ NGHIỆP VỤ ĐẶT VÉ (Trả về HTTP 403 Forbidden nếu gửi yêu cầu).
+ * @param {string|string[]} allowedRoles - Danh sách các vai trò được phép (VD: ['CUSTOMER'] hoặc ['STAFF', 'MANAGER'])
+ */
+function requireRole(allowedRoles) {
+  const rolesList = (Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles]).map(r => r.toUpperCase());
+  if (rolesList.includes("MANAGER") && !rolesList.includes("ADMIN")) {
+    rolesList.push("ADMIN");
+  }
+  if (rolesList.includes("ADMIN") && !rolesList.includes("MANAGER")) {
+    rolesList.push("MANAGER");
+  }
+
+  return (req, res, next) => {
+    let role = "CUSTOMER"; // Mặc định khách vãng lai là CUSTOMER
+    let currentUser = null;
+    let hasToken = false;
+
+    const authHeader = req.header("authorization") || req.header("Authorization");
+    if (authHeader) {
+      const user = authService.verifyToken(authHeader);
+      if (user) {
+        currentUser = user;
+        role = (user.role || "CUSTOMER").toUpperCase();
+        hasToken = true;
+      } else {
+        return res.status(401).json({
+          status: "UNAUTHORIZED",
+          message: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại."
+        });
+      }
+    } else if (req.header("x-demo-role")) {
+      role = req.header("x-demo-role").toUpperCase();
+      hasToken = true;
+    }
+
+    // Nếu endpoint KHÔNG cho phép CUSTOMER (nghĩa là dành cho STAFF hoặc MANAGER)
+    // mà request chưa được xác thực -> 401 Unauthorized
+    if (!rolesList.includes("CUSTOMER") && !hasToken) {
+      return res.status(401).json({
+        status: "UNAUTHORIZED",
+        message: `Yêu cầu đăng nhập tài khoản có thẩm quyền [${rolesList.filter(r => r !== "ADMIN").join(", ")}] để thực hiện thao tác này.`
+      });
+    }
+
+    // Kiểm tra xem vai trò của user có nằm trong danh sách cho phép không
+    const isAllowed = rolesList.includes(role);
+
+    if (!isAllowed) {
+      const displayRole = role === "ADMIN" ? "MANAGER" : role;
+      const displayAllowed = rolesList.filter(r => r !== "ADMIN").join(", ");
+      return res.status(403).json({
+        status: "FORBIDDEN",
+        message: `Truy cập bị từ chối (403 Forbidden): Tài khoản với vai trò '${displayRole}' không có quyền thực hiện chức năng này. Nghiệp vụ chỉ dành riêng cho: [${displayAllowed}].`
+      });
+    }
+
+    req.user = currentUser;
+    req.userRole = role === "ADMIN" ? "MANAGER" : role;
+    next();
+  };
+}
+
+/**
+ * Middleware kiểm tra quyền hạn (Permission-Based Access Control)
  */
 function requirePermission(permission) {
   return (req, res, next) => {
@@ -39,20 +106,27 @@ function requirePermission(permission) {
       if (user) {
         role = (user.role || "CUSTOMER").toUpperCase();
         currentUser = user;
+      } else {
+        return res.status(401).json({
+          status: "UNAUTHORIZED",
+          message: "Phiên đăng nhập không hợp lệ hoặc đã hết hạn."
+        });
       }
     } else if (req.header("x-demo-role")) {
       role = req.header("x-demo-role").toUpperCase();
     }
 
-    if (!ROLE_PERMISSIONS[role] || !ROLE_PERMISSIONS[role].includes(permission)) {
+    const perms = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.CUSTOMER;
+    if (!perms.includes(permission)) {
+      const displayRole = role === "ADMIN" ? "MANAGER" : role;
       return res.status(403).json({
         status: "FORBIDDEN",
-        message: `Tài khoản với vai trò '${role}' không có quyền '${permission}' để thực hiện hành động này.`
+        message: `Truy cập bị từ chối (403 Forbidden): Tài khoản vai trò '${displayRole}' không có quyền '${permission}' để thực hiện hành động này.`
       });
     }
 
     req.user = currentUser;
-    req.userRole = role;
+    req.userRole = role === "ADMIN" ? "MANAGER" : role;
     next();
   };
 }
@@ -258,14 +332,15 @@ app.get("/api/v1/showtimes/:id/seats", (req, res) => {
   });
 });
 
-// 9. Khóa ghế thời gian thực (10 phút TTL)
-app.post("/api/v1/bookings/lock-seats", (req, res) => {
+// 9. Khóa ghế thời gian thực (10 phút TTL) - CHỈ CHO PHÉP CUSTOMER
+app.post(["/api/v1/bookings/lock-seats", "/api/bookings/lock-seats"], requireRole(["CUSTOMER"]), (req, res) => {
   const { showtimeId, seatIds, userId } = req.body;
   if (!showtimeId || !seatIds || !seatIds.length) {
     return res.status(400).json({ status: "ERROR", message: "Thiếu thông tin suất chiếu hoặc danh sách ghế" });
   }
 
-  const result = seatLockService.lockSeats(showtimeId, seatIds, userId);
+  const effectiveUserId = (req.user && req.user.id) || userId || "user_guest";
+  const result = seatLockService.lockSeats(showtimeId, seatIds, effectiveUserId);
   if (!result.success) {
     return res.status(409).json({ status: "CONFLICT", ...result });
   }
@@ -273,8 +348,28 @@ app.post("/api/v1/bookings/lock-seats", (req, res) => {
   res.json({ status: "SUCCESS", ...result });
 });
 
-// 10. Combos Bắp Nước CGV Concession
-app.get("/api/v1/combos", (req, res) => {
+// 9b. Tạo đơn đặt vé mới (POST /api/bookings) - CHỈ CHO PHÉP CUSTOMER
+app.post(["/api/v1/bookings", "/api/bookings"], requireRole(["CUSTOMER"]), (req, res) => {
+  const { showtimeId, seatIds, userId } = req.body;
+  if (!showtimeId || !seatIds || !seatIds.length) {
+    return res.status(400).json({ status: "ERROR", message: "Thiếu thông tin suất chiếu hoặc danh sách ghế để tạo đơn đặt vé." });
+  }
+
+  const effectiveUserId = (req.user && req.user.id) || userId || "user_guest";
+  const result = seatLockService.lockSeats(showtimeId, seatIds, effectiveUserId);
+  if (!result.success) {
+    return res.status(409).json({ status: "CONFLICT", ...result });
+  }
+
+  res.status(201).json({
+    status: "SUCCESS",
+    message: "Tạo đơn đặt vé và giữ chỗ thành công! Ghế đã được khóa trong 10 phút.",
+    ...result
+  });
+});
+
+// 10. Combos Bắp Nước CGV Concession (Công khai cho mọi vai trò xem)
+app.get(["/api/v1/combos", "/api/combos"], (req, res) => {
   res.json({ status: "SUCCESS", data: combos });
 });
 
@@ -299,8 +394,8 @@ app.put("/api/v1/users/:id/profile", requirePermission("profile.manage"), (req, 
   res.json({ status: "SUCCESS", data: safeUser, message: "Đã cập nhật hồ sơ" });
 });
 
-// Lịch sử đặt vé khách hàng (Có hỗ trợ phân trang)
-app.get("/api/v1/users/:id/bookings", (req, res) => {
+// Xem vé của tôi (Lịch sử đặt vé cá nhân) - CHỈ CHO PHÉP CUSTOMER
+app.get(["/api/v1/users/:id/bookings", "/api/users/:id/bookings"], requireRole(["CUSTOMER"]), (req, res) => {
   const { page = 1, limit = 5 } = req.query;
   const userBookings = bookings.filter(item => item.userId === req.params.id).map(item => ({
     ...item,
@@ -321,8 +416,8 @@ app.get("/api/v1/users/:id/bookings", (req, res) => {
   });
 });
 
-// Lịch sử tất cả vé đã đặt dành cho Admin, Quản lý và Nhân viên POS
-app.get("/api/v1/admin/bookings", requirePermission("bookings.read"), (req, res) => {
+// Lịch sử tất cả vé đã đặt dành cho STAFF và MANAGER (Quản lý và Nhân viên soát vé)
+app.get(["/api/v1/admin/bookings", "/api/admin/bookings"], requireRole(["STAFF", "MANAGER"]), (req, res) => {
   const { page = 1, limit = 10, search = "", status = "ALL", date = "" } = req.query;
   const normalizedSearch = String(search).trim().toLowerCase();
   const dateKey = String(date).trim();
@@ -371,64 +466,83 @@ app.get("/api/v1/admin/bookings", requirePermission("bookings.read"), (req, res)
   });
 });
 
-// Xác nhận soát vé / Check-in QR khi khách vào rạp (Dành cho Nhân viên rạp & Admin)
-app.post("/api/v1/bookings/check-in", requirePermission("bookings.scan"), (req, res) => {
-  const { code } = req.body;
-  if (!code) {
-    return res.status(400).json({ status: "ERROR", message: "Vui lòng cung cấp mã đặt vé hoặc mã QR để soát vé." });
-  }
-
-  const cleanCode = String(code).trim().toUpperCase();
-  const booking = bookings.find(b =>
-    (b.bookingCode && b.bookingCode.toUpperCase() === cleanCode) ||
-    (b.qrToken && b.qrToken.toUpperCase() === cleanCode)
-  );
-
-  if (!booking) {
-    return res.status(404).json({ status: "ERROR", message: `Không tìm thấy thông tin vé với mã "${code}".` });
-  }
-
-  if (booking.status === "CHECKED_IN") {
-    return res.status(400).json({
-      status: "ALREADY_CHECKED_IN",
-      message: `Vé ${booking.bookingCode} đã được soát vé vào rạp lúc ${booking.checkedInAt ? new Date(booking.checkedInBy ? booking.checkedInAt : booking.checkedInAt).toLocaleString("vi-VN") : "trước đó"}. Không thể tái sử dụng!`
-    });
-  }
-
-  if (booking.status === "CANCELLED" || booking.status === "REFUNDED") {
-    return res.status(400).json({
-      status: "INVALID",
-      message: `Vé ${booking.bookingCode} đang ở trạng thái "${booking.status}" (Đã hủy hoặc đã hoàn tiền), không được phép vào rạp.`
-    });
-  }
-
-  // Cập nhật trạng thái sang CHECKED_IN
-  booking.status = "CHECKED_IN";
-  booking.checkedInAt = new Date().toISOString();
-  booking.checkedInBy = req.user ? req.user.name : "Nhân viên rạp";
-  dbService.updateBookingCheckIn(booking.bookingCode, booking.checkedInBy).catch(e => console.warn("Lỗi check-in MySQL:", e.message));
-
-  const movie = movies.find(m => m.id === booking.movieId);
-  const showtime = showtimes.find(st => st.id === booking.showtimeId);
-  const room = showtime ? rooms.find(r => r.id === showtime.roomId) : null;
-
-  res.json({
-    status: "SUCCESS",
-    message: `Xác nhận soát vé thành công cho mã ${booking.bookingCode}! Mời khách vào rạp.`,
-    data: {
-      bookingCode: booking.bookingCode,
-      movieTitle: movie ? movie.title : "Phim chiếu rạp",
-      showtimeStart: showtime ? showtime.startTime : "",
-      roomName: room ? room.name : "Phòng chiếu",
-      seats: booking.seats,
-      checkedInAt: booking.checkedInAt,
-      checkedInBy: booking.checkedInBy
+// Tra cứu vé và Xác nhận soát vé / Check-in QR khi khách vào rạp (Dành riêng cho STAFF và MANAGER)
+app.post(
+  ["/api/staff/check-in", "/api/v1/staff/check-in", "/api/v1/bookings/check-in", "/api/bookings/check-in"],
+  requireRole(["STAFF", "MANAGER"]),
+  (req, res) => {
+    const ticketCode = req.body.ticketCode || req.body.code || req.body.bookingCode || req.body.qrToken;
+    if (!ticketCode) {
+      return res.status(400).json({
+        status: "ERROR",
+        message: "Vui lòng cung cấp ticketCode hoặc mã QR để thực hiện soát vé check-in."
+      });
     }
-  });
-});
 
-// 12. Thanh toán & Phát hành vé điện tử CGV (Tích lũy chi tiêu & thăng hạng CGV VIP)
-app.post("/api/v1/payments/checkout", (req, res) => {
+    const cleanCode = String(ticketCode).trim().toUpperCase();
+    const booking = bookings.find(b =>
+      (b.bookingCode && b.bookingCode.toUpperCase() === cleanCode) ||
+      (b.qrToken && b.qrToken.toUpperCase() === cleanCode)
+    );
+
+    if (!booking) {
+      return res.status(404).json({
+        status: "ERROR",
+        message: `Không tìm thấy thông tin vé với mã "${ticketCode}". Vui lòng kiểm tra lại.`
+      });
+    }
+
+    if (booking.status === "CHECKED_IN" || booking.is_checked_in === true) {
+      return res.status(400).json({
+        status: "ALREADY_CHECKED_IN",
+        message: `Vé ${booking.bookingCode} đã được soát vé vào rạp lúc ${booking.checkedInAt ? new Date(booking.checkedInAt).toLocaleString("vi-VN") : "trước đó"}. Không thể tái sử dụng!`
+      });
+    }
+
+    if (booking.status === "CANCELLED" || booking.status === "REFUNDED") {
+      return res.status(400).json({
+        status: "INVALID",
+        message: `Vé ${booking.bookingCode} đang ở trạng thái "${booking.status}" (Đã hủy hoặc đã hoàn tiền), không được phép vào rạp.`
+      });
+    }
+
+    // Cập nhật trạng thái sang CHECKED_IN và is_checked_in = true
+    booking.status = "CHECKED_IN";
+    booking.is_checked_in = true;
+    booking.isCheckedIn = true;
+    booking.checkedInAt = new Date().toISOString();
+    booking.checkedInBy = req.user ? req.user.name : (req.userRole || "Nhân viên soát vé");
+    dbService.updateBookingCheckIn(booking.bookingCode, booking.checkedInBy).catch(e => console.warn("Lỗi check-in MySQL:", e.message));
+
+    const movie = movies.find(m => m.id === booking.movieId);
+    const showtime = showtimes.find(st => st.id === booking.showtimeId);
+    const room = showtime ? rooms.find(r => r.id === showtime.roomId) : null;
+
+    res.json({
+      status: "SUCCESS",
+      message: `Xác nhận soát vé thành công cho mã ${booking.bookingCode}! Mời khách vào rạp.`,
+      data: {
+        ticketCode: booking.bookingCode,
+        bookingCode: booking.bookingCode,
+        is_checked_in: true,
+        isCheckedIn: true,
+        status: "CHECKED_IN",
+        movieTitle: movie ? movie.title : "Phim chiếu rạp",
+        showtimeStart: showtime ? showtime.startTime : "",
+        roomName: room ? room.name : "Phòng chiếu",
+        seats: booking.seats,
+        checkedInAt: booking.checkedInAt,
+        checkedInBy: booking.checkedInBy
+      }
+    });
+  }
+);
+
+// 12. Thanh toán & Phát hành vé điện tử CGV - CHỈ CHO PHÉP CUSTOMER
+app.post(
+  ["/api/v1/payments/checkout", "/api/payments/checkout", "/api/v1/bookings/payment", "/api/bookings/payment"],
+  requireRole(["CUSTOMER"]),
+  (req, res) => {
   const { showtimeId, seatIds, userId, comboIds, customerInfo } = req.body;
 
   if (!showtimeId || !Array.isArray(seatIds) || seatIds.length === 0 || !userId) {
@@ -536,7 +650,8 @@ app.post("/api/v1/payments/checkout", (req, res) => {
 
 // ==================== TRÍ TUỆ NHÂN TẠO (AI APIS) ==================== //
 
-app.get("/api/v1/ai/recommendations", (req, res) => {
+// Gợi ý phim thông minh bằng Gemini AI - CHỈ CHO PHÉP CUSTOMER (STAFF và MANAGER bị từ chối 403 Forbidden)
+app.get(["/api/v1/ai/recommendations", "/api/ai/recommendations"], requireRole(["CUSTOMER"]), (req, res) => {
   const userId = req.query.userId || "user_guest";
   const genres = req.query.genres ? String(req.query.genres).split(",").map(item => item.trim()).filter(Boolean) : [];
   const recommendations = aiService.getPersonalizedRecommendations(userId, { genres });
@@ -574,13 +689,15 @@ app.post("/api/v1/ai/chat", async (req, res) => {
   }
 });
 
-app.get("/api/v1/ai/demand-forecast", requirePermission("analytics.read"), (req, res) => {
+// Dự báo nhu cầu khán giả - CHỈ CHO PHÉP MANAGER (CUSTOMER và STAFF bị từ chối 403 Forbidden)
+app.get(["/api/v1/ai/demand-forecast", "/api/ai/demand-forecast"], requireRole(["MANAGER"]), (req, res) => {
   const dayOfWeek = req.query.dayOfWeek !== undefined ? parseInt(req.query.dayOfWeek) : new Date().getDay();
   const forecast = aiService.getShowtimeDemandForecast(dayOfWeek);
   res.json({ status: "SUCCESS", model: "LightGBM_TimeSeries_v1.8", agent: "AdminAnalyticsAgent", data: forecast });
 });
 
-app.post("/api/v1/ai/booking-assist", (req, res) => {
+// Trợ lý hỗ trợ đặt vé AI - CHỈ CHO PHÉP CUSTOMER
+app.post(["/api/v1/ai/booking-assist", "/api/ai/booking-assist"], requireRole(["CUSTOMER"]), (req, res) => {
   const { movieTitle, preferences, userId } = req.body;
   if (!movieTitle) {
     return res.status(400).json({ status: "ERROR", message: "Vui lòng cung cấp tên phim muốn đặt vé" });
@@ -654,10 +771,10 @@ app.post("/api/v1/support/refund", (req, res) => {
   res.status(httpStatus).json({ status: result.success ? "SUCCESS" : "ERROR", agent: "CustomerServiceAgent_v1", data: result });
 });
 
-// ==================== ADMIN QUẢN TRỊ (CRUD, SEARCH & PAGINATION RIÊNG CHO ADMIN) ==================== //
+// ==================== ADMIN QUẢN TRỊ (CHỈ DÀNH RIÊNG CHO MANAGER / ADMIN) ==================== //
 
-// 1. Quản lý Phim Admin: Tìm kiếm, Lọc và Phân trang (5 phim/trang)
-app.get("/api/v1/admin/movies", requirePermission("movies.read"), (req, res) => {
+// 1. Quản lý Phim Admin: Tìm kiếm, Lọc và Phân trang (CHỈ DÀNH CHO MANAGER)
+app.get(["/api/v1/admin/movies", "/api/admin/movies"], requireRole(["MANAGER"]), (req, res) => {
   const { search, genre, status, page = 1, limit = 5 } = req.query;
   let filtered = [...movies];
 
@@ -698,7 +815,7 @@ app.get("/api/v1/admin/movies", requirePermission("movies.read"), (req, res) => 
   });
 });
 
-app.post("/api/v1/admin/movies", requirePermission("movies.manage"), (req, res) => {
+app.post(["/api/v1/admin/movies", "/api/admin/movies"], requireRole(["MANAGER"]), (req, res) => {
   const { title, durationMinutes, imdbRating, genres, formats, director, cast, ageRating, posterUrl, bannerUrl, description, isHot, trendingScore, status } = req.body;
   if (!title) {
     return res.status(400).json({ status: "ERROR", message: "Tên phim không được để trống." });
@@ -730,7 +847,7 @@ app.post("/api/v1/admin/movies", requirePermission("movies.manage"), (req, res) 
   res.status(201).json({ status: "SUCCESS", data: newMovie, message: `Thêm phim "${newMovie.title}" thành công!` });
 });
 
-app.put("/api/v1/admin/movies/:id", requirePermission("movies.manage"), (req, res) => {
+app.put(["/api/v1/admin/movies/:id", "/api/admin/movies/:id"], requireRole(["MANAGER"]), (req, res) => {
   const movie = movies.find(m => m.id === req.params.id);
   if (!movie) return res.status(404).json({ status: "ERROR", message: "Không tìm thấy phim." });
 
@@ -756,14 +873,14 @@ app.put("/api/v1/admin/movies/:id", requirePermission("movies.manage"), (req, re
   res.json({ status: "SUCCESS", data: movie, message: `Đã cập nhật phim "${movie.title}"!` });
 });
 
-app.patch("/api/v1/admin/movies/:id", requirePermission("movies.manage"), (req, res) => {
+app.patch(["/api/v1/admin/movies/:id", "/api/admin/movies/:id"], requireRole(["MANAGER"]), (req, res) => {
   const movie = movies.find(m => m.id === req.params.id);
   if (!movie) return res.status(404).json({ status: "ERROR", message: "Không tìm thấy phim." });
   Object.assign(movie, req.body);
   res.json({ status: "SUCCESS", data: movie, message: "Đã cập nhật trạng thái phim." });
 });
 
-app.delete("/api/v1/admin/movies/:id", requirePermission("movies.manage"), (req, res) => {
+app.delete(["/api/v1/admin/movies/:id", "/api/admin/movies/:id"], requireRole(["MANAGER"]), (req, res) => {
   const index = movies.findIndex(m => m.id === req.params.id);
   if (index === -1) return res.status(404).json({ status: "ERROR", message: "Không tìm thấy phim." });
 
@@ -783,8 +900,8 @@ app.delete("/api/v1/admin/movies/:id", requirePermission("movies.manage"), (req,
   });
 });
 
-// 2. Quản lý Suất chiếu Admin: Tìm kiếm, Lọc và Phân trang (5 suất/trang)
-app.get("/api/v1/admin/showtimes", requirePermission("showtimes.manage"), (req, res) => {
+// 2. Quản lý Suất chiếu Admin (CHỈ DÀNH CHO MANAGER)
+app.get(["/api/v1/admin/showtimes", "/api/admin/showtimes"], requireRole(["MANAGER"]), (req, res) => {
   const { search, movieId, roomId, page = 1, limit = 5 } = req.query;
 
   let detailed = showtimes.map(st => {
@@ -835,7 +952,7 @@ app.get("/api/v1/admin/showtimes", requirePermission("showtimes.manage"), (req, 
   });
 });
 
-app.post("/api/v1/admin/showtimes", requirePermission("showtimes.manage"), (req, res) => {
+app.post(["/api/v1/admin/showtimes", "/api/admin/showtimes"], requireRole(["MANAGER"]), (req, res) => {
   const { movieId, roomId, startTime, endTime, price } = req.body;
   if (!movieId || !roomId || !startTime) {
     return res.status(400).json({ status: "ERROR", message: "Vui lòng cung cấp đầy đủ thông tin phim, phòng và thời gian." });
@@ -861,7 +978,7 @@ app.post("/api/v1/admin/showtimes", requirePermission("showtimes.manage"), (req,
   res.status(201).json({ status: "SUCCESS", data: newShowtime, message: "Đã tạo suất chiếu mới thành công!" });
 });
 
-app.put("/api/v1/admin/showtimes/:id", requirePermission("showtimes.manage"), (req, res) => {
+app.put(["/api/v1/admin/showtimes/:id", "/api/admin/showtimes/:id"], requireRole(["MANAGER"]), (req, res) => {
   const showtime = showtimes.find(st => st.id === req.params.id);
   if (!showtime) return res.status(404).json({ status: "ERROR", message: "Không tìm thấy suất chiếu." });
 
@@ -881,7 +998,7 @@ app.put("/api/v1/admin/showtimes/:id", requirePermission("showtimes.manage"), (r
   res.json({ status: "SUCCESS", data: showtime, message: "Đã cập nhật suất chiếu thành công!" });
 });
 
-app.delete("/api/v1/admin/showtimes/:id", requirePermission("showtimes.manage"), (req, res) => {
+app.delete(["/api/v1/admin/showtimes/:id", "/api/admin/showtimes/:id"], requireRole(["MANAGER"]), (req, res) => {
   const index = showtimes.findIndex(st => st.id === req.params.id);
   if (index === -1) return res.status(404).json({ status: "ERROR", message: "Không tìm thấy suất chiếu." });
 
@@ -890,8 +1007,8 @@ app.delete("/api/v1/admin/showtimes/:id", requirePermission("showtimes.manage"),
   res.json({ status: "SUCCESS", message: `Đã xóa suất chiếu ${deleted.id}.` });
 });
 
-// 3. Quản lý Người dùng & RBAC Admin: Phân trang (5 user/trang)
-app.get("/api/v1/admin/users", requirePermission("users.manage"), (req, res) => {
+// 3. Quản lý Người dùng & RBAC Admin (CHỈ DÀNH CHO MANAGER)
+app.get(["/api/v1/admin/users", "/api/admin/users"], requireRole(["MANAGER"]), (req, res) => {
   const { search, role, page = 1, limit = 5 } = req.query;
   let filtered = [...users];
 
@@ -929,7 +1046,7 @@ app.get("/api/v1/admin/users", requirePermission("users.manage"), (req, res) => 
   });
 });
 
-app.post("/api/v1/admin/users", requirePermission("users.manage"), (req, res) => {
+app.post(["/api/v1/admin/users", "/api/admin/users"], requireRole(["MANAGER"]), (req, res) => {
   const { name, email, password, phone, role, membership } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ status: "ERROR", message: "Vui lòng nhập tên, email và mật khẩu." });
@@ -940,13 +1057,14 @@ app.post("/api/v1/admin/users", requirePermission("users.manage"), (req, res) =>
     return res.status(400).json({ status: "ERROR", message: "Email này đã tồn tại." });
   }
 
+  const normalizedRole = (role || "CUSTOMER").toUpperCase();
   const newUser = {
     id: `user_${Date.now().toString().slice(-6)}`,
     name: name.trim(),
     email: normalizedEmail,
     password: password,
     phone: phone ? phone.trim() : "",
-    role: (role || "CUSTOMER").toUpperCase(),
+    role: normalizedRole === "ADMIN" ? "MANAGER" : normalizedRole,
     memberCardNumber: `9999-${Math.floor(1000 + Math.random()*9000)}-${Math.floor(1000 + Math.random()*9000)}-${Math.floor(1000 + Math.random()*9000)}`,
     memberTier: "MEMBER",
     membership: membership || "STANDARD",
@@ -963,14 +1081,17 @@ app.post("/api/v1/admin/users", requirePermission("users.manage"), (req, res) =>
   res.status(201).json({ status: "SUCCESS", data: safeUser, message: `Tạo tài khoản cho ${newUser.name} thành công!` });
 });
 
-app.put("/api/v1/admin/users/:id", requirePermission("users.manage"), (req, res) => {
+app.put(["/api/v1/admin/users/:id", "/api/admin/users/:id"], requireRole(["MANAGER"]), (req, res) => {
   const user = users.find(u => u.id === req.params.id);
   if (!user) return res.status(404).json({ status: "ERROR", message: "Không tìm thấy người dùng." });
 
   const { name, phone, role, status, membership, points, password, memberTier } = req.body;
   if (name) user.name = name.trim();
   if (phone !== undefined) user.phone = phone.trim();
-  if (role && ROLE_PERMISSIONS[role.toUpperCase()]) user.role = role.toUpperCase();
+  if (role) {
+    const r = role.toUpperCase();
+    if (ROLE_PERMISSIONS[r]) user.role = r === "ADMIN" ? "MANAGER" : r;
+  }
   if (status) user.status = status;
   if (membership) user.membership = membership;
   if (memberTier) user.memberTier = memberTier;
@@ -981,17 +1102,17 @@ app.put("/api/v1/admin/users/:id", requirePermission("users.manage"), (req, res)
   res.json({ status: "SUCCESS", data: safeUser, message: `Đã cập nhật tài khoản ${user.name}.` });
 });
 
-app.patch("/api/v1/admin/users/:id/role", requirePermission("users.manage"), (req, res) => {
+app.patch(["/api/v1/admin/users/:id/role", "/api/admin/users/:id/role"], requireRole(["MANAGER"]), (req, res) => {
   const user = users.find(item => item.id === req.params.id);
   const role = String(req.body.role || "").toUpperCase();
   if (!user || !ROLE_PERMISSIONS[role]) return res.status(400).json({ status: "ERROR", message: "Tài khoản hoặc vai trò không hợp lệ." });
-  user.role = role;
-  dbService.updateUserRole(user.id, role).catch(e => console.warn("Lỗi cập nhật role user MySQL:", e.message));
+  user.role = role === "ADMIN" ? "MANAGER" : role;
+  dbService.updateUserRole(user.id, user.role).catch(e => console.warn("Lỗi cập nhật role user MySQL:", e.message));
   const { password: _, ...safeUser } = user;
-  res.json({ status: "SUCCESS", data: safeUser, message: `Đã cập nhật quyền thành "${role}"` });
+  res.json({ status: "SUCCESS", data: safeUser, message: `Đã cập nhật quyền thành "${user.role}"` });
 });
 
-app.delete("/api/v1/admin/users/:id", requirePermission("users.manage"), (req, res) => {
+app.delete(["/api/v1/admin/users/:id", "/api/admin/users/:id"], requireRole(["MANAGER"]), (req, res) => {
   if (req.params.id === "admin_001") {
     return res.status(400).json({ status: "ERROR", message: "Không thể xóa tài khoản Quản trị viên gốc của hệ thống!" });
   }
@@ -1004,25 +1125,25 @@ app.delete("/api/v1/admin/users/:id", requirePermission("users.manage"), (req, r
   res.json({ status: "SUCCESS", message: `Đã xóa tài khoản "${deleted.name}".` });
 });
 
-// 4. Admin Analytics & Báo cáo
-app.get("/api/v1/admin/daily-report", requirePermission("analytics.read"), (req, res) => {
+// 4. Admin Analytics & Báo cáo doanh thu & AI (CHỈ DÀNH CHO MANAGER)
+app.get(["/api/v1/admin/daily-report", "/api/admin/daily-report"], requireRole(["MANAGER"]), (req, res) => {
   const date = req.query.date ? new Date(req.query.date) : new Date();
   const report = aiService.getDailyReport(date);
   res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_v1", data: report });
 });
 
-app.get("/api/v1/admin/optimal-schedule", requirePermission("ai.manage"), (req, res) => {
+app.get(["/api/v1/admin/optimal-schedule", "/api/admin/optimal-schedule"], requireRole(["MANAGER"]), (req, res) => {
   const schedule = aiService.getOptimalSchedule();
   res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_v1", data: schedule });
 });
 
-app.get("/api/v1/admin/revenue-analysis", requirePermission("analytics.read"), (req, res) => {
+app.get(["/api/v1/admin/revenue-analysis", "/api/admin/revenue-analysis"], requireRole(["MANAGER"]), (req, res) => {
   const movieId = req.query.movieId || null;
   const analysis = aiService.getRevenueAnalysis(movieId);
   res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_v1", data: analysis });
 });
 
-app.get("/api/v1/admin/ai-health", requirePermission("ai.manage"), (req, res) => {
+app.get(["/api/v1/admin/ai-health", "/api/admin/ai-health"], requireRole(["MANAGER"]), (req, res) => {
   res.json({
     status: "SUCCESS",
     data: {
@@ -1038,12 +1159,16 @@ app.get("/api/v1/admin/ai-health", requirePermission("ai.manage"), (req, res) =>
 });
 
 // Khởi chạy server
-app.listen(PORT, async () => {
-  console.log(`====================================================`);
-  console.log(` 🎬 CGV Cultureplex Cinema Management — Port ${PORT}`);
-  console.log(`    http://localhost:${PORT}`);
-  console.log(` 🎟️ Thanh Đặt Vé Nhanh & Phân Trang Khách Hàng / Admin`);
-  console.log(` 👑 Thẻ Thành Viên CGV Membership & Phân Quyền RBAC`);
-  console.log(`====================================================`);
-  await database.testConnection();
-});
+if (require.main === module) {
+  app.listen(PORT, async () => {
+    console.log(`====================================================`);
+    console.log(` 🎬 CGV Cultureplex Cinema Management — Port ${PORT}`);
+    console.log(`    http://localhost:${PORT}`);
+    console.log(` 🎟️ Thanh Đặt Vé Nhanh & Phân Trang Khách Hàng / Admin`);
+    console.log(` 👑 Thẻ Thành Viên CGV Membership & Phân Quyền RBAC`);
+    console.log(`====================================================`);
+    await database.testConnection();
+  });
+}
+
+module.exports = app;

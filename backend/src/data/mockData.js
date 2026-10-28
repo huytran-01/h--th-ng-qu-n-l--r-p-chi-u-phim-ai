@@ -457,7 +457,7 @@ const users = [
     email: "admin@aicinema.vn",
     password: "admin123",
     phone: "0903003003",
-    role: "ADMIN",
+    role: "MANAGER",
     memberCardNumber: "9999-0000-ADMIN-01",
     memberTier: "INTERNAL",
     points: 0,
@@ -469,8 +469,8 @@ const users = [
 ];
 
 const bookings = [
-  { bookingCode: "BKG-240901", qrToken: "CGV-TICKET-BKG-240901-XYZ1", userId: "user_guest", movieId: "mov-01", showtimeId: "st-101", seats: ["D5", "D6"], total: 450000, status: "PAID", bookedAt: "2026-09-22T10:30:00.000Z" },
-  { bookingCode: "BKG-240842", qrToken: "CGV-TICKET-BKG-240842-XYZ2", userId: "user_guest", movieId: "mov-03", showtimeId: "st-105", seats: ["E4"], total: 200000, status: "PAID", bookedAt: "2026-09-21T12:10:00.000Z" }
+  { bookingCode: "BKG-240901", qrToken: "CGV-TICKET-BKG-240901-XYZ1", userId: "user_guest", movieId: "mov-01", showtimeId: "st-101", seats: ["D5", "D6"], total: 450000, status: "PAID", is_checked_in: false, isCheckedIn: false, bookedAt: "2026-09-22T10:30:00.000Z" },
+  { bookingCode: "BKG-240842", qrToken: "CGV-TICKET-BKG-240842-XYZ2", userId: "user_guest", movieId: "mov-03", showtimeId: "st-105", seats: ["E4"], total: 200000, status: "PAID", is_checked_in: false, isCheckedIn: false, bookedAt: "2026-09-21T12:10:00.000Z" }
 ];
 
 module.exports = {
