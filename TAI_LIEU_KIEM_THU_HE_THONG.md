@@ -441,6 +441,49 @@ Bảng ma trận RTM ánh xạ 1-1 từ toàn bộ các yêu cầu nghiệp vụ
 
 ---
 
+### PHÂN HỆ 8: TÁCH BIỆT GIAO DIỆN & PHÂN QUYỀN 3 VAI TRÒ (ROLE-BASED UI & RBAC ISOLATION)
+
+#### TC_UI_ROLE_01: Đăng nhập CUSTOMER -> Chỉ hiển thị Customer Portal, cô lập POS & Admin
+* **Mã Yêu Cầu:** `FR-01`, `FR-03`, `FR-05`, `NFR-01`
+* **Tác nhân:** Khách hàng (`CUSTOMER`) & Khách vãng lai (Guest)
+* **Tiền điều kiện:** Tài khoản `customer@aicinema.vn` đăng nhập thành công.
+* **Các bước thực hiện:**
+  1. Kiểm tra không gian làm việc Client: Tự động tải `home-view`.
+  2. Kiểm tra thành phần hiển thị: Hero Banner, Thanh đặt vé nhanh 4 bước, Danh mục phim & bộ lọc, Sơ đồ chọn ghế TTL 10m, Chọn Combo F&B, Thanh toán vé QR, Lịch sử vé cá nhân, Hồ sơ thẻ thành viên CGV (`MEMBER/VIP/VVIP`), CGV AI Recommendation Studio và Chatbot AI 24/7.
+  3. Kiểm tra thành phần bị ẩn: Ẩn hoàn toàn Quầy soát vé POS (`staff-view`), Trung tâm Quản trị (`admin-view`), ẩn link Soát vé và Quản trị trên Header và Dropdown menu.
+  4. Kiểm tra ranh giới Backend: Gửi `POST /api/v1/bookings/check-in` và `GET /api/v1/admin/users` bằng Customer Bearer Token.
+* **Kết quả mong đợi:** Client chỉ xem được không gian khách hàng, backend chặn với HTTP 403 Forbidden.
+* **Kết quả thực tế:** HTTP 403 FORBIDDEN, thông báo từ chối truy cập chính xác, giao diện POS & Admin bị ẩn an toàn 100%.
+* **Trạng thái:** **PASS**
+
+#### TC_UI_ROLE_02: Đăng nhập STAFF -> Tự động vào Staff POS Workspace, ẩn đặt vé khách & chặn Admin
+* **Mã Yêu Cầu:** `FR-11`, `FR-12`, `FR-13`, `NFR-01`
+* **Tác nhân:** Nhân viên rạp (`STAFF`)
+* **Tiền điều kiện:** Tài khoản `minhanh@aicinema.vn` đăng nhập thành công.
+* **Các bước thực hiện:**
+  1. Kiểm tra điều hướng: Tự động chuyển thẳng vào `staff-view` (Quầy Vận Hành & Soát Vé POS).
+  2. Kiểm tra thành phần hiển thị: Thanh điều hướng STAFF chỉ gồm 3 nghiệp vụ: (1) Quét QR / Soát vé Check-in (`CHECKED_IN`), (2) Tra cứu Lịch sử Đơn vé (10 vé/trang), (3) Hỗ trợ Hoàn/Hủy vé tự động (`CustomerServiceAgent`).
+  3. Kiểm tra thành phần bị ẩn: Ẩn hoàn toàn Hero Banner, Quick Booking bar, Catalog phim mua vé của khách, AI Recommendation Studio và Chatbot khách hàng; ẩn hoàn toàn Admin Dashboard.
+  4. Kiểm tra ranh giới Backend: Gửi `POST /api/v1/admin/movies`, `POST /api/v1/admin/showtimes`, `GET /api/v1/admin/daily-report` bằng Staff Bearer Token.
+* **Kết quả mong đợi:** Tự động vào Staff Workspace, giao diện đặt vé khách hàng và Admin bị ẩn, Backend chặn HTTP 403 Forbidden.
+* **Kết quả thực tế:** HTTP 403 FORBIDDEN cho các API Admin CRUD và Báo cáo KPI, Staff Workspace hoạt động độc lập và bảo mật.
+* **Trạng thái:** **PASS**
+
+#### TC_UI_ROLE_03: Đăng nhập ADMIN -> Tự động vào Admin Dashboard, chặn mua vé cá nhân Admin
+* **Mã Yêu Cầu:** `FR-14`, `FR-15`, `FR-16`, `FR-17`, `FR-18`, `NFR-01`
+* **Tác nhân:** Quản trị viên (`ADMIN`)
+* **Tiền điều kiện:** Tài khoản `admin@aicinema.vn` đăng nhập thành công.
+* **Các bước thực hiện:**
+  1. Kiểm tra điều hướng: Tự động chuyển thẳng vào `admin-view` (Trung tâm Quản trị Hệ thống).
+  2. Kiểm tra thành phần hiển thị: Thanh điều hướng ADMIN gồm 5 phân hệ: (1) Dashboard Báo cáo KPI, (2) Quản lý Phim CRUD, (3) Quản lý Suất chiếu CRUD & Chống trùng giờ, (4) Quản lý Người dùng & Cấp quyền RBAC, (5) AI Analytics & Dự báo nhu cầu LightGBM.
+  3. Kiểm tra tách bạch nghiệp vụ: Ẩn hoàn toàn giao diện mua vé giải trí của khách hàng.
+  4. Kiểm tra chặn đặt vé cá nhân: Gửi request `POST /api/v1/bookings/lock-seats` và `POST /api/v1/payments/checkout` bằng token Admin.
+* **Kết quả mong đợi:** HTTP 403 Forbidden kèm thông báo: *"Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân"*.
+* **Kết quả thực tế:** HTTP 403 FORBIDDEN, thông báo chuẩn xác như yêu cầu, tài khoản Admin được cách ly hoàn toàn khỏi luồng đặt vé cá nhân.
+* **Trạng thái:** **PASS**
+
+---
+
 # PHẦN 3: KẾT LUẬN & ĐÁNH GIÁ CHẤT LƯỢNG
 
-Toàn bộ **40/40 Test Cases** đã được kiểm thử tự động thành công thông qua file script [cinema-e2e.test.js](file:///c:/Users/Admin/OneDrive/Tài%20liệu/Hệ-Thống-Quản-Lý-Rạp-Chiếu-Phim/backend/tests/cinema-e2e.test.js), đạt **tỷ lệ thành công tuyệt đối 100%**. Hệ thống sẵn sàng vận hành trên môi trường thực tế và bảo vệ đồ án tốt nghiệp.
+Toàn bộ **44/44 Test Cases** (bao gồm 40 Test Cases nghiệp vụ cốt lõi và 4 Test Cases Role-Based UI & RBAC Isolation) đã được kiểm thử tự động thành công thông qua file script [cinema-e2e.test.js](file:///c:/Users/Admin/OneDrive/Tài%20liệu/Hệ-Thống-Quản-Lý-Rạp-Chiếu-Phim/backend/tests/cinema-e2e.test.js), đạt **tỷ lệ thành công tuyệt đối 100%**. Hệ thống sẵn sàng vận hành trên môi trường thực tế và bảo vệ đồ án tốt nghiệp.

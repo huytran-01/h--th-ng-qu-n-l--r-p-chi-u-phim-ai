@@ -316,26 +316,118 @@ const cinemas = [
 ];
 
 const rooms = [
+  // Cụm cin-01: CGV Vincom Landmark 81 (TP. HCM)
   { id: "room-01", cinemaId: "cin-01", name: "Phòng 01 - IMAX Laser", type: "IMAX", totalSeats: 80 },
   { id: "room-02", cinemaId: "cin-01", name: "Phòng 02 - Gold Class VIP", type: "VIP", totalSeats: 40 },
   { id: "room-03", cinemaId: "cin-01", name: "Phòng 03 - 2D Dolby Atmos", type: "STANDARD", totalSeats: 80 },
+  // Cụm cin-02: CGV Hùng Vương Plaza (TP. HCM)
   { id: "room-04", cinemaId: "cin-02", name: "Phòng 04 - 4DX Dynamic", type: "4DX", totalSeats: 60 },
-  { id: "room-05", cinemaId: "cin-03", name: "Phòng 05 - ScreenX 270°", type: "SCREENX", totalSeats: 80 }
+  { id: "room-06", cinemaId: "cin-02", name: "Phòng 06 - 2D Standard", type: "STANDARD", totalSeats: 80 },
+  // Cụm cin-03: CGV Vincom Royal City (Hà Nội)
+  { id: "room-05", cinemaId: "cin-03", name: "Phòng 05 - ScreenX 270°", type: "SCREENX", totalSeats: 80 },
+  { id: "room-07", cinemaId: "cin-03", name: "Phòng 02 - IMAX Laser Royal", type: "IMAX", totalSeats: 80 },
+  { id: "room-08", cinemaId: "cin-03", name: "Phòng 03 - 2D Dolby Atmos", type: "STANDARD", totalSeats: 80 },
+  // Cụm cin-04: CGV Vincom Bà Triệu (Hà Nội)
+  { id: "room-09", cinemaId: "cin-04", name: "Phòng 01 - Gold Class VIP", type: "VIP", totalSeats: 40 },
+  { id: "room-10", cinemaId: "cin-04", name: "Phòng 02 - 2D Digital", type: "STANDARD", totalSeats: 80 },
+  // Cụm cin-05: CGV Vincom Đà Nẵng (Đà Nẵng)
+  { id: "room-11", cinemaId: "cin-05", name: "Phòng 01 - Starium Laser", type: "STARIUM", totalSeats: 80 },
+  { id: "room-12", cinemaId: "cin-05", name: "Phòng 02 - 2D Dolby Atmos", type: "STANDARD", totalSeats: 80 }
 ];
 
-// Danh sách suất chiếu mẫu phong phú
-const showtimes = [
-  { id: "st-101", movieId: "mov-01", roomId: "room-01", startTime: "2026-09-22 18:30", endTime: "2026-09-22 21:15", price: 150000 },
-  { id: "st-102", movieId: "mov-01", roomId: "room-01", startTime: "2026-09-22 21:45", endTime: "2026-09-23 00:30", price: 160000 },
-  { id: "st-103", movieId: "mov-02", roomId: "room-03", startTime: "2026-09-22 19:00", endTime: "2026-09-22 21:15", price: 110000 },
-  { id: "st-104", movieId: "mov-02", roomId: "room-02", startTime: "2026-09-22 20:30", endTime: "2026-09-22 22:45", price: 220000 },
-  { id: "st-105", movieId: "mov-03", roomId: "room-01", startTime: "2026-09-23 19:30", endTime: "2026-09-23 22:30", price: 160000 },
-  { id: "st-106", movieId: "mov-06", roomId: "room-03", startTime: "2026-09-22 22:00", endTime: "2026-09-23 00:15", price: 110000 },
-  { id: "st-107", movieId: "mov-07", roomId: "room-01", startTime: "2026-09-23 15:00", endTime: "2026-09-23 17:50", price: 140000 },
-  { id: "st-108", movieId: "mov-08", roomId: "room-03", startTime: "2026-09-23 18:00", endTime: "2026-09-23 20:20", price: 110000 },
-  { id: "st-109", movieId: "mov-04", roomId: "room-04", startTime: "2026-09-23 17:30", endTime: "2026-09-23 19:05", price: 170000 },
-  { id: "st-110", movieId: "mov-05", roomId: "room-05", startTime: "2026-09-23 20:00", endTime: "2026-09-23 21:55", price: 165000 }
-];
+// Helper sinh ngày giờ linh hoạt theo thời gian thực (luôn có suất chiếu hôm nay, ngày mai, các ngày tiếp theo)
+const getDynamicDateStr = (daysOffset, timeStr) => {
+  const d = new Date();
+  d.setDate(d.getDate() + daysOffset);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day} ${timeStr}`;
+};
+
+// Hàm sinh danh sách suất chiếu thời gian thực cho 7 ngày tới (từ hôm nay trở đi)
+const generateRealtimeShowtimes = () => {
+  const list = [];
+  const scheduleTemplate = [
+    // 1. Exhuma: Quật Mộ Trùng Ma (mov-06) - Phim đang chọn trong ảnh
+    { movieId: "mov-06", roomId: "room-05", time: "10:15", price: 140000, format: "SCREENX" },
+    { movieId: "mov-06", roomId: "room-07", time: "13:30", price: 160000, format: "IMAX" },
+    { movieId: "mov-06", roomId: "room-08", time: "16:45", price: 110000, format: "2D" },
+    { movieId: "mov-06", roomId: "room-05", time: "19:00", price: 150000, format: "SCREENX" },
+    { movieId: "mov-06", roomId: "room-07", time: "21:30", price: 170000, format: "IMAX" },
+    { movieId: "mov-06", roomId: "room-01", time: "18:00", price: 160000, format: "IMAX" },
+    { movieId: "mov-06", roomId: "room-03", time: "20:15", price: 110000, format: "2D" },
+    { movieId: "mov-06", roomId: "room-04", time: "15:00", price: 155000, format: "4DX" },
+
+    // 2. Dune: Hành Tinh Cát 2 (mov-01)
+    { movieId: "mov-01", roomId: "room-01", time: "10:00", price: 150000, format: "IMAX" },
+    { movieId: "mov-01", roomId: "room-01", time: "14:30", price: 150000, format: "IMAX" },
+    { movieId: "mov-01", roomId: "room-01", time: "18:30", price: 160000, format: "IMAX" },
+    { movieId: "mov-01", roomId: "room-01", time: "21:45", price: 160000, format: "IMAX" },
+    { movieId: "mov-01", roomId: "room-07", time: "18:00", price: 160000, format: "IMAX" },
+    { movieId: "mov-01", roomId: "room-07", time: "21:15", price: 160000, format: "IMAX" },
+
+    // 3. Mai (mov-02)
+    { movieId: "mov-02", roomId: "room-03", time: "11:00", price: 105000, format: "2D" },
+    { movieId: "mov-02", roomId: "room-03", time: "15:30", price: 110000, format: "2D" },
+    { movieId: "mov-02", roomId: "room-03", time: "19:15", price: 120000, format: "2D" },
+    { movieId: "mov-02", roomId: "room-08", time: "14:00", price: 110000, format: "2D" },
+    { movieId: "mov-02", roomId: "room-08", time: "19:30", price: 120000, format: "2D" },
+    { movieId: "mov-02", roomId: "room-02", time: "20:30", price: 210000, format: "VIP" },
+
+    // 4. Godzilla x Kong: Đế Chế Mới (mov-05)
+    { movieId: "mov-05", roomId: "room-04", time: "11:30", price: 150000, format: "4DX" },
+    { movieId: "mov-05", roomId: "room-04", time: "17:15", price: 165000, format: "4DX" },
+    { movieId: "mov-05", roomId: "room-04", time: "20:45", price: 170000, format: "4DX" },
+    { movieId: "mov-05", roomId: "room-05", time: "14:15", price: 145000, format: "SCREENX" },
+    { movieId: "mov-05", roomId: "room-05", time: "22:00", price: 145000, format: "SCREENX" },
+
+    // 5. Kung Fu Panda 4 (mov-04)
+    { movieId: "mov-04", roomId: "room-04", time: "09:15", price: 140000, format: "4DX" },
+    { movieId: "mov-04", roomId: "room-04", time: "13:45", price: 145000, format: "4DX" },
+    { movieId: "mov-04", roomId: "room-08", time: "10:30", price: 100000, format: "2D" },
+    { movieId: "mov-04", roomId: "room-08", time: "15:45", price: 105000, format: "2D" },
+
+    // 6. Oppenheimer (mov-03)
+    { movieId: "mov-03", roomId: "room-02", time: "13:30", price: 200000, format: "VIP" },
+    { movieId: "mov-03", roomId: "room-02", time: "17:45", price: 210000, format: "VIP" },
+    { movieId: "mov-03", roomId: "room-07", time: "10:30", price: 155000, format: "IMAX" },
+
+    // 7. Interstellar: Hố Đen Tử Thần (mov-07)
+    { movieId: "mov-07", roomId: "room-01", time: "13:15", price: 150000, format: "IMAX" },
+    { movieId: "mov-07", roomId: "room-07", time: "14:15", price: 155000, format: "IMAX" },
+
+    // 8. Lật Mặt 7: Một Điều Ước (mov-08)
+    { movieId: "mov-08", roomId: "room-03", time: "13:00", price: 110000, format: "2D" },
+    { movieId: "mov-08", roomId: "room-03", time: "17:30", price: 115000, format: "2D" },
+    { movieId: "mov-08", roomId: "room-08", time: "11:45", price: 110000, format: "2D" },
+    { movieId: "mov-08", roomId: "room-08", time: "17:45", price: 115000, format: "2D" }
+  ];
+
+  for (let offset = 0; offset < 7; offset++) {
+    scheduleTemplate.forEach(t => {
+      const start = getDynamicDateStr(offset, t.time);
+      const [h, m] = t.time.split(":").map(Number);
+      const endH = String((h + 2) % 24).padStart(2, "0");
+      const endM = String((m + 15) % 60).padStart(2, "0");
+      const end = getDynamicDateStr(offset, `${endH}:${endM}`);
+
+      list.push({
+        id: `st-${t.movieId}-${t.roomId}-d${offset}-${t.time.replace(":", "")}`,
+        movieId: t.movieId,
+        roomId: t.roomId,
+        startTime: start,
+        endTime: end,
+        price: t.price,
+        format: t.format
+      });
+    });
+  }
+  return list;
+};
+
+// Danh sách suất chiếu mẫu phong phú theo thời gian thực
+const showtimes = generateRealtimeShowtimes();
 
 // Sinh ma trận ghế (Hàng A -> H, mỗi hàng 10 ghế)
 const generateSeats = () => {

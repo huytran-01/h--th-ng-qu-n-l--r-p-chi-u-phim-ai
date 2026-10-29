@@ -62,6 +62,55 @@ let bookingSearchTimeout = null;
 
 let deleteConfirmCallback = null;
 
+// ==================== TIME FORMATTING UTILITIES ==================== //
+function formatShowtime(dateTimeStr) {
+  if (!dateTimeStr) return "";
+  const d = new Date(dateTimeStr);
+  if (isNaN(d.getTime())) {
+    const match = String(dateTimeStr).match(/(\d{1,2}:\d{2})/);
+    return match ? match[1] : (dateTimeStr.length >= 5 ? dateTimeStr.slice(-5) : dateTimeStr);
+  }
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function formatShowtimeFull(dateTimeStr) {
+  if (!dateTimeStr) return "Hôm nay";
+  const d = new Date(dateTimeStr);
+  if (isNaN(d.getTime())) {
+    return String(dateTimeStr);
+  }
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  return `${hours}:${minutes} - ${day}/${month}/${year}`;
+}
+
+/**
+ * Chuyển đổi chuỗi ngày giờ (UTC ISO hoặc Mock) thành định dạng chuẩn giờ Việt Nam (GMT+7)
+ * Dùng cho input type="datetime-local" (YYYY-MM-DDTHH:mm)
+ */
+function toLocalDatetimeInputString(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) {
+    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(dateStr)) {
+      return dateStr.replace(" ", "T").slice(0, 16);
+    }
+    return "";
+  }
+  const pad = n => String(n).padStart(2, "0");
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 // ==================== INITIALIZATION ==================== //
 document.addEventListener("DOMContentLoaded", async () => {
   // Khởi tạo trạng thái đăng nhập
@@ -72,6 +121,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     await quickLogin("customer@aicinema.vn", "123456", false);
   } else {
     updateAuthUI();
+  }
+
+  // Role-Based Workspace Isolation ngay khi tải lại trang
+  if (currentUser) {
+    if (currentUser.role === "STAFF") {
+      switchView("staff");
+    } else if (currentUser.role === "ADMIN") {
+      switchView("admin");
+    } else {
+      switchView("home");
+    }
+  } else {
+    switchView("home");
   }
 
   // Tải dữ liệu ban đầu
@@ -149,22 +211,42 @@ async function fetchCurrentUser() {
   return null;
 }
 
+function handleBrandLogoClick() {
+  if (currentUser && currentUser.role === "ADMIN") {
+    switchView("admin");
+  } else if (currentUser && (currentUser.role === "STAFF" || currentUser.role === "MANAGER")) {
+    switchView("staff");
+  } else {
+    switchView("home");
+  }
+}
+
 function updateAuthUI() {
   const unloggedSec = document.getElementById("auth-unlogged-section");
   const loggedSec = document.getElementById("auth-logged-section");
-  const navStaffLink = document.getElementById("nav-staff-link");
-  const navAdminLink = document.getElementById("nav-admin-link");
-  const dropdownStaffLink = document.getElementById("dropdown-staff-link");
-  const dropdownAdminLink = document.getElementById("dropdown-admin-link");
+  
+  const navCustomerGroup = document.getElementById("nav-customer-group");
+  const navStaffGroup = document.getElementById("nav-staff-group");
+  const navAdminGroup = document.getElementById("nav-admin-group");
+
+  const dropdownCustomerLinks = document.getElementById("dropdown-customer-links");
+  const dropdownStaffLinks = document.getElementById("dropdown-staff-links");
+  const dropdownAdminLinks = document.getElementById("dropdown-admin-links");
+  const chatbotContainer = document.getElementById("chatbot-container");
 
   if (!currentUser) {
     if (unloggedSec) unloggedSec.classList.remove("hidden");
     if (loggedSec) loggedSec.classList.add("hidden");
-    // Ẩn hoàn toàn các chức năng quản trị và nhân viên khi chưa đăng nhập
-    if (navStaffLink) { navStaffLink.classList.add("hidden"); navStaffLink.style.display = "none"; }
-    if (navAdminLink) { navAdminLink.classList.add("hidden"); navAdminLink.style.display = "none"; }
-    if (dropdownStaffLink) { dropdownStaffLink.classList.add("hidden"); dropdownStaffLink.style.display = "none"; }
-    if (dropdownAdminLink) { dropdownAdminLink.classList.add("hidden"); dropdownAdminLink.style.display = "none"; }
+
+    if (navCustomerGroup) navCustomerGroup.classList.remove("hidden");
+    if (navStaffGroup) navStaffGroup.classList.add("hidden");
+    if (navAdminGroup) navAdminGroup.classList.add("hidden");
+
+    if (dropdownCustomerLinks) dropdownCustomerLinks.classList.remove("hidden");
+    if (dropdownStaffLinks) dropdownStaffLinks.classList.add("hidden");
+    if (dropdownAdminLinks) dropdownAdminLinks.classList.add("hidden");
+
+    if (chatbotContainer) chatbotContainer.classList.remove("hidden");
     return;
   }
 
@@ -189,13 +271,11 @@ function updateAuthUI() {
     CUSTOMER: {
       label: `CGV ${tier} (${points} P)`,
       badgeClass: tier === "VVIP" ? "bg-purple-950 text-purple-300 border-purple-800" : tier === "VIP" ? "bg-yellow-950 text-cgv-gold border-yellow-800" : "bg-red-950 text-red-300 border-red-800",
-      icon: "fa-crown",
-      canStaff: false,
-      canAdmin: false
+      icon: "fa-crown"
     },
-    STAFF: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canStaff: true, canAdmin: false },
-    MANAGER: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register", canStaff: true, canAdmin: false },
-    ADMIN: { label: "Quản trị viên", badgeClass: "bg-red-950 text-red-400 border-red-800", icon: "fa-shield", canStaff: true, canAdmin: true }
+    STAFF: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register" },
+    MANAGER: { label: "Nhân viên rạp", badgeClass: "bg-green-950 text-green-400 border-green-800", icon: "fa-cash-register" },
+    ADMIN: { label: "Quản trị viên", badgeClass: "bg-red-950 text-red-400 border-red-800", icon: "fa-shield" }
   };
 
   const config = roleConfigs[currentUser.role] || roleConfigs.CUSTOMER;
@@ -205,47 +285,40 @@ function updateAuthUI() {
     dropdownRoleBadge.className = `px-2 py-0.5 rounded text-[10px] font-bold border ${config.badgeClass}`;
   }
 
-  // PHÂN QUYỀN ẨN/HIỆN CHỨC NĂNG THEO VAI TRÒ CHÍNH XÁC:
-  // 1. Phân hệ Nghiệp vụ Nhân viên rạp (STAFF & ADMIN)
-  if (config.canStaff) {
-    if (navStaffLink) {
-      navStaffLink.classList.remove("hidden");
-      navStaffLink.style.display = "inline-flex";
-    }
-    if (dropdownStaffLink) {
-      dropdownStaffLink.classList.remove("hidden");
-      dropdownStaffLink.style.display = "flex";
-    }
-  } else {
-    if (navStaffLink) {
-      navStaffLink.classList.add("hidden");
-      navStaffLink.style.display = "none";
-    }
-    if (dropdownStaffLink) {
-      dropdownStaffLink.classList.add("hidden");
-      dropdownStaffLink.style.display = "none";
-    }
-  }
+  // TÁCH BẠCH GIAO DIỆN & THANH ĐIỀU HƯỚNG THEO ĐÚNG 3 VAI TRÒ
+  if (currentUser.role === "STAFF") {
+    // 1. GIAO DIỆN NHÂN VIÊN RẠP (STAFF WORKSPACE)
+    if (navCustomerGroup) navCustomerGroup.classList.add("hidden");
+    if (navStaffGroup) navStaffGroup.classList.remove("hidden");
+    if (navAdminGroup) navAdminGroup.classList.add("hidden");
 
-  // 2. Phân hệ Quản trị Hệ thống (CHỈ ADMIN)
-  if (config.canAdmin) {
-    if (navAdminLink) {
-      navAdminLink.classList.remove("hidden");
-      navAdminLink.style.display = "inline-flex";
-    }
-    if (dropdownAdminLink) {
-      dropdownAdminLink.classList.remove("hidden");
-      dropdownAdminLink.style.display = "flex";
-    }
+    if (dropdownCustomerLinks) dropdownCustomerLinks.classList.add("hidden");
+    if (dropdownStaffLinks) dropdownStaffLinks.classList.remove("hidden");
+    if (dropdownAdminLinks) dropdownAdminLinks.classList.add("hidden");
+
+    if (chatbotContainer) chatbotContainer.classList.add("hidden");
+  } else if (currentUser.role === "ADMIN") {
+    // 2. GIAO DIỆN QUẢN TRỊ VIÊN (ADMIN WORKSPACE)
+    if (navCustomerGroup) navCustomerGroup.classList.add("hidden");
+    if (navStaffGroup) navStaffGroup.classList.add("hidden");
+    if (navAdminGroup) navAdminGroup.classList.remove("hidden");
+
+    if (dropdownCustomerLinks) dropdownCustomerLinks.classList.add("hidden");
+    if (dropdownStaffLinks) dropdownStaffLinks.classList.add("hidden");
+    if (dropdownAdminLinks) dropdownAdminLinks.classList.remove("hidden");
+
+    if (chatbotContainer) chatbotContainer.classList.add("hidden");
   } else {
-    if (navAdminLink) {
-      navAdminLink.classList.add("hidden");
-      navAdminLink.style.display = "none";
-    }
-    if (dropdownAdminLink) {
-      dropdownAdminLink.classList.add("hidden");
-      dropdownAdminLink.style.display = "none";
-    }
+    // 3. GIAO DIỆN KHÁCH HÀNG (CUSTOMER & GUEST)
+    if (navCustomerGroup) navCustomerGroup.classList.remove("hidden");
+    if (navStaffGroup) navStaffGroup.classList.add("hidden");
+    if (navAdminGroup) navAdminGroup.classList.add("hidden");
+
+    if (dropdownCustomerLinks) dropdownCustomerLinks.classList.remove("hidden");
+    if (dropdownStaffLinks) dropdownStaffLinks.classList.add("hidden");
+    if (dropdownAdminLinks) dropdownAdminLinks.classList.add("hidden");
+
+    if (chatbotContainer) chatbotContainer.classList.remove("hidden");
   }
 
   const adminTag = document.getElementById("admin-current-user-tag");
@@ -256,16 +329,6 @@ function updateAuthUI() {
   const staffTag = document.getElementById("staff-user-tag");
   if (staffTag) {
     staffTag.innerHTML = `<i class="fa-solid fa-user-check mr-2 text-green-400"></i>${currentUser.name} (${currentUser.role})`;
-  }
-  const staffAdminBtn = document.getElementById("staff-btn-admin-view");
-  if (staffAdminBtn) {
-    if (currentUser && currentUser.role === "ADMIN") {
-      staffAdminBtn.classList.remove("hidden");
-      staffAdminBtn.style.display = "inline-flex";
-    } else {
-      staffAdminBtn.classList.add("hidden");
-      staffAdminBtn.style.display = "none";
-    }
   }
 }
 
@@ -447,11 +510,12 @@ function switchView(viewName) {
   const adminView = document.getElementById("admin-view");
   const aiLabView = document.getElementById("ai-lab-view");
   const accountView = document.getElementById("account-view");
+  const chatbotEl = document.getElementById("chatbot-container");
 
   // 1. Phân hệ Nghiệp vụ Nhân viên rạp (Chỉ STAFF & ADMIN)
   if (viewName === "staff") {
     if (!currentUser || !["STAFF", "ADMIN", "MANAGER"].includes(currentUser.role)) {
-      showToast("Bạn không có quyền truy cập trang Nghiệp Vụ Nhân Viên!", "error");
+      showToast("Bạn không có quyền truy cập Quầy Vận Hành & Soát Vé POS!", "error");
       switchView("home");
       return;
     }
@@ -460,6 +524,22 @@ function switchView(viewName) {
     if (aiLabView) aiLabView.classList.add("hidden");
     if (accountView) accountView.classList.add("hidden");
     if (staffView) staffView.classList.remove("hidden");
+    if (chatbotEl) chatbotEl.classList.add("hidden");
+
+    // Nếu tài khoản Admin truy cập quầy soát vé, cập nhật trạng thái active trên thanh menu Admin
+    const adminTabs = ["kpi", "movies", "showtimes", "users", "bookings", "forecast"];
+    adminTabs.forEach(t => {
+      const navItem = document.getElementById(`nav-admin-tab-${t}`);
+      if (navItem) {
+        navItem.className = "nav-item whitespace-nowrap text-gray-300 hover:text-white px-2.5 py-1.5 rounded-xl hover:bg-gray-800/60 transition flex items-center";
+      }
+    });
+    const navPos = document.getElementById("nav-admin-tab-pos");
+    if (navPos) {
+      navPos.className = "nav-item whitespace-nowrap text-green-400 font-bold px-2.5 py-1.5 rounded-xl bg-green-950/70 border border-green-700/80 transition flex items-center shadow";
+    }
+
+    switchStaffTab("scan");
     fetchStaffBookings();
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
@@ -469,7 +549,11 @@ function switchView(viewName) {
   if (viewName === "admin") {
     if (!currentUser || currentUser.role !== "ADMIN") {
       showToast("Chức năng Quản Trị Hệ Thống chỉ dành riêng cho Quản trị viên!", "error");
-      switchView("home");
+      if (currentUser && currentUser.role === "STAFF") {
+        switchView("staff");
+      } else {
+        switchView("home");
+      }
       return;
     }
     if (homeView) homeView.classList.add("hidden");
@@ -477,12 +561,24 @@ function switchView(viewName) {
     if (aiLabView) aiLabView.classList.add("hidden");
     if (accountView) accountView.classList.add("hidden");
     if (adminView) adminView.classList.remove("hidden");
-    const chatbotEl = document.getElementById("chatbot-container");
     if (chatbotEl) chatbotEl.classList.add("hidden");
-    updateAdminCapabilities();
     loadAdminDashboard();
-    switchAdminTab("movies");
+    switchAdminTab("kpi");
     window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  // Nếu là STAFF mà bấm vào home/ai-lab: chuyển hướng về staff
+  if (currentUser && currentUser.role === "STAFF" && (viewName === "home" || viewName === "ai-lab")) {
+    showToast("Tài khoản Nhân viên rạp đang trong ca trực tại Quầy Soát Vé POS.", "info");
+    switchView("staff");
+    return;
+  }
+
+  // Nếu là ADMIN mà bấm vào home/ai-lab: chuyển hướng về admin
+  if (currentUser && currentUser.role === "ADMIN" && (viewName === "home" || viewName === "ai-lab")) {
+    showToast("Tài khoản Quản trị viên đang quản lý điều hành tại Admin Dashboard.", "info");
+    switchView("admin");
     return;
   }
 
@@ -493,6 +589,7 @@ function switchView(viewName) {
     if (adminView) adminView.classList.add("hidden");
     if (accountView) accountView.classList.add("hidden");
     if (aiLabView) aiLabView.classList.remove("hidden");
+    if (chatbotEl) chatbotEl.classList.remove("hidden");
     loadRecommendationLab();
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
@@ -505,19 +602,10 @@ function switchView(viewName) {
     if (adminView) adminView.classList.add("hidden");
     if (aiLabView) aiLabView.classList.add("hidden");
     if (accountView) accountView.classList.remove("hidden");
+    if (chatbotEl) chatbotEl.classList.remove("hidden");
     loadAccountView();
     window.scrollTo({ top: 0, behavior: "smooth" });
     return;
-  }
-
-  // Ẩn Floating Chatbot khi vào trang Quản trị Admin để giao diện thông thoáng, không che nội dung
-  const chatbotEl = document.getElementById("chatbot-container");
-  if (chatbotEl) {
-    if (viewName === "admin") {
-      chatbotEl.classList.add("hidden");
-    } else {
-      chatbotEl.classList.remove("hidden");
-    }
   }
 
   // 5. Phân hệ Trang chủ Khách hàng (Mặc định)
@@ -526,6 +614,7 @@ function switchView(viewName) {
   if (aiLabView) aiLabView.classList.add("hidden");
   if (accountView) accountView.classList.add("hidden");
   if (homeView) homeView.classList.remove("hidden");
+  if (chatbotEl) chatbotEl.classList.remove("hidden");
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -562,6 +651,39 @@ async function fetchCinemas() {
   }
 }
 
+function populateQuickBookingDates() {
+  const dateSelect = document.getElementById("qb-date");
+  if (!dateSelect) return;
+
+  dateSelect.innerHTML = "";
+  const now = new Date();
+  const dayNames = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now);
+    d.setDate(now.getDate() + i);
+
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const isoDate = `${year}-${month}-${day}`;
+
+    let label = "";
+    if (i === 0) {
+      label = `Hôm nay (${day}/${month})`;
+    } else if (i === 1) {
+      label = `Ngày mai (${day}/${month})`;
+    } else {
+      label = `${dayNames[d.getDay()]} (${day}/${month})`;
+    }
+
+    const opt = document.createElement("option");
+    opt.value = isoDate;
+    opt.textContent = label;
+    dateSelect.appendChild(opt);
+  }
+}
+
 function initQuickBookingBar() {
   const movieSelect = document.getElementById("qb-movie");
   const cinemaSelect = document.getElementById("qb-cinema");
@@ -572,9 +694,11 @@ function initQuickBookingBar() {
   }
 
   if (cinemaSelect) {
-    cinemaSelect.innerHTML = `<option value="">-- Chọn Cụm Rạp CGV --</option>` +
+    cinemaSelect.innerHTML = `<option value="">-- Tất Cả Cụm Rạp CGV --</option>` +
       allCinemas.map(c => `<option value="${c.id}">${c.name} (${c.region})</option>`).join("");
   }
+
+  populateQuickBookingDates();
 }
 
 async function handleQuickBookingMovieChange(movieId) {
@@ -590,20 +714,28 @@ async function handleQuickBookingDateChange(dateValue) {
 }
 
 async function updateQuickBookingShowtimes() {
-  const movieId = document.getElementById("qb-movie").value;
-  const cinemaId = document.getElementById("qb-cinema").value;
+  const movieSelect = document.getElementById("qb-movie");
+  const cinemaSelect = document.getElementById("qb-cinema");
+  const dateSelect = document.getElementById("qb-date");
   const showtimeSelect = document.getElementById("qb-showtime");
 
   if (!showtimeSelect) return;
+
+  const movieId = movieSelect ? movieSelect.value : "";
+  const cinemaId = cinemaSelect ? cinemaSelect.value : "";
+  const dateValue = dateSelect ? dateSelect.value : "";
 
   if (!movieId) {
     showtimeSelect.innerHTML = `<option value="">-- Vui lòng chọn phim trước --</option>`;
     return;
   }
 
+  showtimeSelect.innerHTML = `<option value="">Đang tải suất chiếu...</option>`;
+
   try {
     let url = `${API_BASE}/showtimes?movieId=${movieId}`;
     if (cinemaId) url += `&cinemaId=${cinemaId}`;
+    if (dateValue) url += `&date=${dateValue}`;
 
     const res = await fetch(url);
     const json = await res.json();
@@ -611,11 +743,28 @@ async function updateQuickBookingShowtimes() {
     if (json.status === "SUCCESS" && json.data.length > 0) {
       showtimeSelect.innerHTML = json.data.map(st => `
         <option value="${st.id}">
-          ${st.startTime.slice(-5)} • ${st.room ? st.room.name : 'Phòng'} • ${st.price.toLocaleString('vi-VN')}đ
+          ${formatShowtime(st.startTime)} • ${st.room ? st.room.name : 'Phòng'} • ${st.price.toLocaleString('vi-VN')}đ
         </option>
       `).join("");
     } else {
-      showtimeSelect.innerHTML = `<option value="">Chưa có suất chiếu phù hợp</option>`;
+      // Nếu ngày hoặc rạp đó không có suất chiếu, thử tìm tất cả suất chiếu của phim này
+      let fallbackUrl = `${API_BASE}/showtimes?movieId=${movieId}`;
+      if (cinemaId) fallbackUrl += `&cinemaId=${cinemaId}`;
+      const fbRes = await fetch(fallbackUrl);
+      const fbJson = await fbRes.json();
+
+      if (fbJson.status === "SUCCESS" && fbJson.data.length > 0) {
+        showtimeSelect.innerHTML = `
+          <option value="">-- Không có suất ngày này (Xem ngày gần nhất) --</option>
+          ${fbJson.data.slice(0, 6).map(st => `
+            <option value="${st.id}">
+              ${formatShowtimeFull(st.startTime)} • ${st.room ? st.room.name : 'Phòng'} • ${st.price.toLocaleString('vi-VN')}đ
+            </option>
+          `).join("")}
+        `;
+      } else {
+        showtimeSelect.innerHTML = `<option value="">Chưa có suất chiếu phù hợp</option>`;
+      }
     }
   } catch (e) {
     showtimeSelect.innerHTML = `<option value="">Lỗi lấy suất chiếu</option>`;
@@ -623,6 +772,11 @@ async function updateQuickBookingShowtimes() {
 }
 
 function executeQuickBooking() {
+  if (currentUser && currentUser.role === "ADMIN") {
+    showToast("Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân", "error");
+    return;
+  }
+
   const movieId = document.getElementById("qb-movie").value;
   const showtimeId = document.getElementById("qb-showtime").value;
 
@@ -929,7 +1083,7 @@ function renderCustomerBookings(bookingsList, pagination) {
           <span class="px-2 py-0.5 rounded-full ${b.status === 'CHECKED_IN' ? 'bg-teal-950 text-teal-300 border border-teal-800' : 'bg-green-950 text-green-400 border border-green-800'} text-[10px] font-bold">${b.status === 'CHECKED_IN' ? 'Đã vào rạp' : b.status === 'PAID' ? 'Đã thanh toán' : b.status}</span>
         </div>
         <p class="text-xs text-gray-300 mt-1">
-          <i class="fa-regular fa-clock mr-1 text-cgv-red"></i>${b.showtime ? b.showtime.startTime : ''} • Ghế: <b class="text-cgv-gold">${b.seats.join(", ")}</b>
+          <i class="fa-regular fa-clock mr-1 text-cgv-red"></i>${b.showtime ? formatShowtimeFull(b.showtime.startTime) : ''} • Ghế: <b class="text-cgv-gold">${b.seats.join(", ")}</b>
         </p>
         <div class="flex items-center justify-between mt-2 pt-2 border-t border-gray-800/80">
           <span class="text-[10px] text-gray-400 font-mono">Mã: <b class="text-white">${b.bookingCode}</b></span>
@@ -996,18 +1150,514 @@ async function saveAccountProfile() {
   }
 }
 
+// ==================== STAFF POS WORKSPACE CONTROLLER ==================== //
+
+function switchStaffTab(tabName) {
+  const scanSec = document.getElementById("staff-tab-scan-section");
+  const bookingsSec = document.getElementById("staff-tab-bookings-section");
+  const refundSec = document.getElementById("staff-tab-refund-section");
+
+  const btnScan = document.getElementById("btn-staff-tab-scan");
+  const btnBookings = document.getElementById("btn-staff-tab-bookings");
+  const btnRefund = document.getElementById("btn-staff-tab-refund");
+
+  const navScan = document.getElementById("nav-staff-tab-scan");
+  const navBookings = document.getElementById("nav-staff-tab-bookings");
+  const navRefund = document.getElementById("nav-staff-tab-refund");
+
+  if (scanSec) scanSec.classList.add("hidden");
+  if (bookingsSec) bookingsSec.classList.add("hidden");
+  if (refundSec) refundSec.classList.add("hidden");
+
+  const resetBtn = (btn) => {
+    if (btn) btn.className = "staff-tab px-4 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-xs font-bold transition flex items-center hover:text-white";
+  };
+  resetBtn(btnScan);
+  resetBtn(btnBookings);
+  resetBtn(btnRefund);
+
+  const resetNav = (nav) => {
+    if (nav) nav.className = "nav-item whitespace-nowrap text-gray-300 hover:text-white px-3 py-1.5 rounded-xl hover:bg-gray-800/60 transition flex items-center";
+  };
+  resetNav(navScan);
+  resetNav(navBookings);
+  resetNav(navRefund);
+
+  if (tabName === "scan") {
+    if (scanSec) scanSec.classList.remove("hidden");
+    if (btnScan) btnScan.className = "staff-tab px-4 py-2.5 rounded-xl bg-green-600 text-white text-xs font-bold transition flex items-center shadow shadow-green-900/40";
+    if (navScan) navScan.className = "nav-item whitespace-nowrap text-green-400 font-bold px-3 py-1.5 rounded-xl bg-green-950/50 border border-green-800/60 hover:bg-green-900/60 transition flex items-center shadow";
+    const input = document.getElementById("staff-checkin-input");
+    if (input) input.focus();
+  } else if (tabName === "bookings") {
+    if (bookingsSec) bookingsSec.classList.remove("hidden");
+    if (btnBookings) btnBookings.className = "staff-tab px-4 py-2.5 rounded-xl bg-cgv-gold text-black text-xs font-bold transition flex items-center shadow shadow-yellow-900/40";
+    if (navBookings) navBookings.className = "nav-item whitespace-nowrap text-cgv-gold font-bold px-3 py-1.5 rounded-xl bg-yellow-950/50 border border-yellow-800/60 hover:bg-yellow-900/60 transition flex items-center shadow";
+    fetchStaffBookings();
+  } else if (tabName === "refund") {
+    if (refundSec) refundSec.classList.remove("hidden");
+    if (btnRefund) btnRefund.className = "staff-tab px-4 py-2.5 rounded-xl bg-yellow-500 text-black text-xs font-bold transition flex items-center shadow shadow-yellow-900/40";
+    if (navRefund) navRefund.className = "nav-item whitespace-nowrap text-yellow-400 font-bold px-3 py-1.5 rounded-xl bg-yellow-950/50 border border-yellow-800/60 hover:bg-yellow-900/60 transition flex items-center shadow";
+  }
+}
+
+// ==================== KHU VỰC HỖ TRỢ HOÀN / HỦY VÉ (CUSTOMERSERVICEAGENT) ==================== //
+
+let staffRefundPendingAction = null;
+
+/**
+ * Mở Custom Modal xác nhận Hoàn / Hủy Vé phong cách CGV Cultureplex Dark Mode
+ * Thay thế hoàn toàn hàm confirm() mặc định thô sơ của trình duyệt
+ */
+function openStaffRefundConfirmModal(data) {
+  const modal = document.getElementById("staff-refund-confirm-modal");
+  if (!modal) return;
+
+  const codeEl = document.getElementById("staff-refund-modal-code");
+  const movieEl = document.getElementById("staff-refund-modal-movie");
+  const customerEl = document.getElementById("staff-refund-modal-customer");
+  const showtimeEl = document.getElementById("staff-refund-modal-showtime");
+  const seatsEl = document.getElementById("staff-refund-modal-seats");
+  const rateEl = document.getElementById("staff-refund-modal-rate");
+  const amountEl = document.getElementById("staff-refund-modal-amount");
+  const reasonEl = document.getElementById("staff-refund-modal-reason");
+  const tagEl = document.getElementById("staff-refund-modal-type-tag");
+  const noteEl = document.getElementById("staff-refund-modal-note");
+  const titleEl = document.getElementById("staff-refund-modal-title");
+  const btnConfirm = document.getElementById("btn-staff-refund-modal-confirm");
+  const btnText = document.getElementById("btn-staff-refund-modal-text");
+  const iconContainer = document.getElementById("staff-refund-modal-icon-container");
+  const iconEl = document.getElementById("staff-refund-modal-icon");
+
+  if (codeEl) codeEl.textContent = data.bookingCode || "CGV-UNKNOWN";
+  if (movieEl) movieEl.textContent = data.movieTitle || "Phim chiếu rạp";
+  if (customerEl) customerEl.textContent = data.customerName || (currentUser?.name || "Khách hàng");
+  if (showtimeEl) showtimeEl.textContent = data.showtimeFormatted || "-";
+  if (seatsEl) seatsEl.textContent = `${data.seatsFormatted || "-"} (${data.roomName || "Phòng chiếu"})`;
+  if (amountEl) amountEl.textContent = `${Number(data.amountNum || 0).toLocaleString("vi-VN")} đ`;
+  if (reasonEl) reasonEl.textContent = data.reason || "Khách yêu cầu hoàn vé tại quầy";
+
+  const isForce = Boolean(data.isForceOverride);
+
+  if (isForce) {
+    if (tagEl) {
+      tagEl.textContent = "HỦY NGOẠI LỆ";
+      tagEl.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-red-950 text-red-300 border border-red-700";
+    }
+    if (rateEl) {
+      rateEl.textContent = "0% (QUYỀN STAFF)";
+      rateEl.className = "px-2 py-0.5 rounded text-xs font-black bg-red-950 text-red-400 border border-red-800";
+    }
+    if (titleEl) {
+      titleEl.innerHTML = `Xác Nhận Hủy Vé Ngoại Lệ <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-red-950 text-red-300 border border-red-700">HỦY NGOẠI LỆ</span>`;
+    }
+    if (iconContainer) {
+      iconContainer.className = "w-11 h-11 rounded-2xl bg-gradient-to-br from-red-600 to-rose-700 text-white flex items-center justify-center text-xl shadow-lg shadow-red-600/30";
+    }
+    if (iconEl) iconEl.className = "fa-solid fa-ban";
+    if (noteEl) {
+      noteEl.innerHTML = ` Đơn vé này thuộc diện sát giờ chiếu/đặc biệt. Thao tác hủy sẽ áp dụng quyền hạn Quản lý/Nhân viên, giải phóng toàn bộ ghế về trạng thái <b class="text-white">TRỐNG (AVAILABLE)</b> ngay lập tức.`;
+    }
+    if (btnConfirm) {
+      btnConfirm.className = "px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs uppercase tracking-wider transition shadow-lg shadow-red-600/30 flex items-center gap-2 active:scale-95";
+    }
+    if (btnText) btnText.textContent = "Xác Nhận Hủy Vé & Mở Ghế";
+  } else {
+    if (tagEl) {
+      tagEl.textContent = "HOÀN TIỀN TỰ ĐỘNG";
+      tagEl.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-green-950 text-green-300 border border-green-700";
+    }
+    if (rateEl) {
+      rateEl.textContent = data.rateStr || "100%";
+      rateEl.className = "px-2 py-0.5 rounded text-xs font-black bg-green-950 text-green-400 border border-green-800";
+    }
+    if (titleEl) {
+      titleEl.innerHTML = `Xác Nhận Xử Lý Hoàn Vé <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-950 text-green-300 border border-green-700">HOÀN TIỀN</span>`;
+    }
+    if (iconContainer) {
+      iconContainer.className = "w-11 h-11 rounded-2xl bg-gradient-to-br from-yellow-600 to-amber-700 text-black flex items-center justify-center text-xl shadow-lg shadow-yellow-600/30";
+    }
+    if (iconEl) iconEl.className = "fa-solid fa-receipt";
+    if (noteEl) {
+      noteEl.innerHTML = ` Hệ thống sẽ xác nhận hoàn tiền cho khách, chuyển trạng thái đơn vé sang <b class="text-white">REFUNDED</b> và tự động mở lại các ghế đã đặt về <b class="text-white">TRỐNG (AVAILABLE)</b>.`;
+    }
+    if (btnConfirm) {
+      btnConfirm.className = "px-6 py-2.5 rounded-xl bg-gradient-to-r from-yellow-600 via-amber-600 to-yellow-500 hover:from-yellow-500 hover:to-amber-500 text-black font-black text-xs uppercase tracking-wider transition shadow-lg shadow-yellow-600/30 flex items-center gap-2 active:scale-95";
+    }
+    if (btnText) btnText.textContent = `Xác Nhận Hoàn Vé (${data.rateStr || "100%"})`;
+  }
+
+  // Gán callback thực thi khi bấm nút Xác nhận trong Modal
+  staffRefundPendingAction = () => executeStaffRefundConfirmed(data);
+  if (btnConfirm) {
+    btnConfirm.onclick = () => {
+      if (typeof staffRefundPendingAction === "function") {
+        staffRefundPendingAction();
+      }
+    };
+  }
+
+  modal.classList.remove("hidden");
+}
+
+function closeStaffRefundConfirmModal() {
+  const modal = document.getElementById("staff-refund-confirm-modal");
+  if (modal) modal.classList.add("hidden");
+  staffRefundPendingAction = null;
+}
+
+/**
+ * Thực thi gọi API hỗ trợ hoàn tiền sau khi nhân viên đã xác nhận trên Custom Modal
+ */
+async function executeStaffRefundConfirmed(data) {
+  closeStaffRefundConfirmModal();
+  const { bookingCode, isForceOverride, rateStr, amountNum, reason } = data;
+  const finalReason = isForceOverride ? `[NGOẠI LỆ QUẢN LÝ / NHÂN VIÊN] ${reason}` : reason;
+
+  showToast(`⏳ Đang xử lý hoàn vé cho mã ${bookingCode}...`, "info");
+
+  try {
+    const res = await apiFetch(`/support/refund`, {
+      method: "POST",
+      body: JSON.stringify({
+        bookingCode,
+        reason: finalReason,
+        customerInfo: {
+          name: currentUser ? currentUser.name : "Nhân viên quầy POS",
+          forceOverride: Boolean(isForceOverride),
+          isStaffOverride: Boolean(isForceOverride),
+          refundAmount: amountNum,
+          refundRate: rateStr
+        }
+      })
+    });
+    const json = await res.json();
+
+    if (json.status === "SUCCESS" && json.data?.approved) {
+      showToast(`🎉 Xử lý thành công vé ${bookingCode}! Ghế đã được giải phóng về trạng thái AVAILABLE.`, "success");
+      // Cập nhật lại kết quả thẩm định và bảng danh sách vé
+      handleStaffCheckRefund();
+      fetchStaffBookings();
+    } else {
+      showToast(json.data?.message || json.message || "Từ chối hoàn vé theo chính sách rạp.", "error");
+    }
+  } catch (err) {
+    showToast("Không thể thực hiện hoàn vé. Vui lòng kiểm tra lại kết nối máy chủ.", "error");
+  }
+}
+
+async function handleStaffCheckRefund() {
+  const codeInput = document.getElementById("staff-refund-code-input");
+  const resultBox = document.getElementById("staff-refund-result-box");
+  const reasonSelect = document.getElementById("staff-refund-reason-select");
+  const code = (codeInput?.value || "").trim().toUpperCase();
+  const reason = (reasonSelect?.value || "").trim();
+
+  if (!code) {
+    showToast("Vui lòng nhập mã đặt vé cần thẩm định!", "warning");
+    if (codeInput) codeInput.focus();
+    return;
+  }
+
+  resultBox.classList.remove("hidden");
+  resultBox.innerHTML = `
+    <div class="p-8 text-center text-gray-400 bg-gray-900/80 rounded-2xl border border-gray-800">
+      <i class="fa-solid fa-spinner animate-spin mr-2 text-yellow-400 text-lg"></i>
+      <span class="text-xs font-bold text-gray-300">CustomerServiceAgent đang thẩm định điều kiện vé & kiểm tra chính sách CGV...</span>
+    </div>
+  `;
+
+  try {
+    const res = await apiFetch(`/support/booking-status/${code}`);
+    const json = await res.json();
+
+    if (!json.data || !json.data.found) {
+      resultBox.innerHTML = `
+        <div class="p-5 rounded-2xl bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-center justify-between shadow-xl">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-red-900/60 flex items-center justify-center text-red-400 text-lg">
+              <i class="fa-solid fa-circle-xmark"></i>
+            </div>
+            <div>
+              <b class="text-white text-sm block">Không Tìm Thấy Thông Tin Vé</b>
+              <span class="text-gray-300">Mã đơn vé <code class="font-mono font-bold text-yellow-400 bg-black/40 px-1.5 py-0.5 rounded">${code}</code> không tồn tại trong hệ thống. Vui lòng kiểm tra lại ký tự hoặc quét lại mã QR!</span>
+            </div>
+          </div>
+          <button onclick="handleStaffCheckRefund()" class="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold transition">Thử Lại</button>
+        </div>
+      `;
+      return;
+    }
+
+    const b = json.data.booking;
+    const startTime = new Date(b.showtimeStart).getTime();
+    const now = Date.now();
+    const hoursLeft = (startTime - now) / (1000 * 3600);
+    const hoursFormatted = hoursLeft > 0 ? `${hoursLeft.toFixed(1)} giờ nữa` : "Đã qua giờ chiếu";
+
+    const totalMoney = Number(b.total || b.totalAmount || 0);
+    const roomName = b.roomName || "Phòng 01 - IMAX Laser";
+    const seatsArray = Array.isArray(b.seats) ? b.seats : (b.seats ? String(b.seats).split(/,\s*/) : []);
+    const seatsDisplay = seatsArray.join(", ") || "-";
+
+    const showDate = b.showtimeStart ? new Date(b.showtimeStart) : null;
+    const showtimeFormatted = showDate && !isNaN(showDate.getTime()) 
+      ? `${showDate.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })} • ${showDate.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" })}`
+      : "-";
+
+    let refundRate = "0%";
+    let refundAmount = 0;
+    let badgeClass = "bg-red-950 text-red-400 border-red-800";
+    let statusText = "TỪ CHỐI HOÀN TIỀN (0%)";
+    let canAutoRefund = false;
+    let policyDesc = "";
+
+    if (b.status === "REFUNDED" || b.status === "CANCELLED") {
+      resultBox.innerHTML = `
+        <div class="p-5 rounded-2xl bg-yellow-950/50 border border-yellow-800 text-yellow-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xl">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-yellow-900/60 flex items-center justify-center text-yellow-400 text-lg">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div>
+              <b class="text-white text-sm block">Đơn Vé Đã Được Xử Lý Hủy / Hoàn Tiền</b>
+              <span>Đơn vé <code class="font-mono font-bold text-yellow-400 bg-black/40 px-1.5 py-0.5 rounded">${b.bookingCode}</code> hiện có trạng thái <b>${b.status}</b>. Toàn bộ ghế (<b class="text-white">${seatsDisplay}</b>) đã được giải phóng về trạng thái mở bán lại (<code class="text-green-400 font-mono">AVAILABLE</code>).</span>
+            </div>
+          </div>
+          <span class="px-3 py-1.5 rounded-xl bg-yellow-900/80 text-yellow-300 font-black text-xs border border-yellow-700 whitespace-nowrap self-start sm:self-center">
+            <i class="fa-solid fa-circle-check mr-1"></i> GHẾ ĐÃ MỞ BÁN LẠI
+          </span>
+        </div>
+      `;
+      return;
+    }
+
+    if (b.status === "CHECKED_IN") {
+      resultBox.innerHTML = `
+        <div class="p-5 rounded-2xl bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-center gap-3 shadow-xl">
+          <div class="w-10 h-10 rounded-xl bg-red-900/60 flex items-center justify-center text-red-400 text-lg">
+            <i class="fa-solid fa-ban"></i>
+          </div>
+          <div>
+            <b class="text-white text-sm block">Không Thể Hoàn Vé Đã Vào Rạp</b>
+            <span>Vé <code class="font-mono font-bold text-yellow-400 bg-black/40 px-1.5 py-0.5 rounded">${b.bookingCode}</code> đã được nhân viên soát vé vào phòng chiếu lúc <b class="text-white">${b.checkedInAt ? new Date(b.checkedInAt).toLocaleString('vi-VN') : 'trước đó'}</b>. Theo quy chế an toàn CGV, đơn vé đã check-in không đủ điều kiện hoàn trả tiền.</span>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    // Kiểm tra trường hợp đặc biệt (Sự cố kỹ thuật, đột xuất, sức khỏe)
+    const isSpecialCase = /kỹ thuật|sự cố|lỗi|hủy|bệnh|đột xuất|khẩn cấp|sức khỏe|y tế/i.test(reason);
+
+    if (isSpecialCase) {
+      refundRate = "100%";
+      refundAmount = totalMoney;
+      badgeClass = "bg-purple-950 text-purple-300 border-purple-700";
+      statusText = "DUYỆT HOÀN 100% (SỰ CỐ ĐẶC BIỆT / KHẨN CẤP)";
+      canAutoRefund = true;
+      policyDesc = `Khách hàng gặp lý do: "${reason}". CustomerServiceAgent xác nhận thuộc diện ngoại lệ ưu tiên -> Phê duyệt hoàn 100% giá trị vé & giải phóng toàn bộ ghế ngồi ngay lập tức.`;
+    } else if (hoursLeft > 24) {
+      refundRate = "100%";
+      refundAmount = totalMoney;
+      badgeClass = "bg-green-950 text-green-400 border-green-800";
+      statusText = "ĐỦ ĐIỀU KIỆN HOÀN 100%";
+      canAutoRefund = true;
+      policyDesc = "Suất chiếu cách hiện tại trên 24 giờ. Theo chính sách hoàn vé tiêu chuẩn CGV Cultureplex, khách hàng được duyệt hoàn 100% giá trị vé.";
+    } else if (hoursLeft >= 2) {
+      refundRate = "50%";
+      refundAmount = Math.round(totalMoney * 0.5);
+      badgeClass = "bg-yellow-950 text-yellow-400 border-yellow-800";
+      statusText = "ĐỦ ĐIỀU KIỆN HOÀN 50%";
+      canAutoRefund = true;
+      policyDesc = "Suất chiếu cách hiện tại trong khoảng 2h - 24h. Theo quy chế, áp dụng hoàn 50% giá trị đơn vé và khấu trừ 50% chi phí giữ chỗ phòng chiếu.";
+    } else {
+      refundRate = "0%";
+      refundAmount = 0;
+      badgeClass = "bg-red-950 text-red-400 border-red-800";
+      statusText = "TỪ CHỐI HOÀN TIỀN (0%)";
+      canAutoRefund = false;
+      policyDesc = "Suất chiếu cách hiện tại dưới 2 giờ (hoặc đã bắt đầu chiếu). Hệ thống tự động từ chối hoàn tiền theo chính sách. Nhân viên có thể sử dụng quyền HỦY VÉ NGOẠI LỆ để giải phóng ghế nếu có chỉ đạo từ Trưởng ca.";
+    }
+
+    // Chuẩn bị payload data để mở Custom Modal
+    const refundDataPayload = {
+      bookingCode: b.bookingCode,
+      movieTitle: b.movieTitle || "Phim đang chiếu",
+      customerName: b.customerName || (b.customer ? b.customer.name : "Khách hàng"),
+      showtimeFormatted,
+      seatsFormatted: seatsDisplay,
+      roomName,
+      totalMoney,
+      refundRate,
+      amountNum: refundAmount,
+      rateStr: refundRate,
+      reason,
+      isForceOverride: !canAutoRefund
+    };
+
+    // Render Boarding Pass Thẩm Định Cinema Cao Cấp
+    resultBox.innerHTML = `
+      <div class="p-6 rounded-3xl bg-gray-900 border border-gray-700 shadow-2xl space-y-5 animate-in fade-in duration-200">
+        <!-- Header Phiếu Thẩm Định -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-800 gap-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-yellow-950 border border-yellow-700/60 text-yellow-400 flex items-center justify-center text-lg">
+              <i class="fa-solid fa-clipboard-check"></i>
+            </div>
+            <div>
+              <span class="text-[10px] uppercase font-mono tracking-wider text-gray-500 font-bold block">KẾT QUẢ THẨM ĐỊNH AI AGENT</span>
+              <h3 class="text-base font-black text-white flex items-center gap-2">
+                ${b.movieTitle || "Phim chiếu rạp"}
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-gray-800 text-gray-300">${b.bookingCode}</span>
+              </h3>
+            </div>
+          </div>
+          <span class="px-3.5 py-1.5 rounded-full text-xs font-black border ${badgeClass} self-start sm:self-auto shadow-md">
+            ${statusText}
+          </span>
+        </div>
+
+        <!-- 4 Thẻ Thông Tin Tóm Tắt -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div class="p-3.5 rounded-2xl bg-black/40 border border-gray-800">
+            <span class="text-gray-400 block text-[11px] mb-1"><i class="fa-solid fa-couch text-gray-500 mr-1"></i> Phòng / Ghế:</span>
+            <b class="text-white block line-clamp-1">${roomName}</b>
+            <span class="text-yellow-400 font-mono font-black text-xs">${seatsDisplay}</span>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-black/40 border border-gray-800">
+            <span class="text-gray-400 block text-[11px] mb-1"><i class="fa-regular fa-clock text-gray-500 mr-1"></i> Giờ chiếu:</span>
+            <b class="text-cyan-300 block">${showtimeFormatted}</b>
+            <span class="text-gray-400 text-[11px]">${hoursFormatted}</span>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-black/40 border border-gray-800">
+            <span class="text-gray-400 block text-[11px] mb-1"><i class="fa-solid fa-receipt text-gray-500 mr-1"></i> Giá trị ban đầu:</span>
+            <b class="text-gray-200 text-sm block">${totalMoney.toLocaleString("vi-VN")} đ</b>
+            <span class="text-gray-500 text-[10px]">(Đã thanh toán)</span>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-black/40 border border-gray-800">
+            <span class="text-gray-400 block text-[11px] mb-1"><i class="fa-solid fa-hand-holding-dollar text-green-400 mr-1"></i> Tiền duyệt hoàn:</span>
+            <b class="text-green-400 text-base block font-black">${refundAmount.toLocaleString("vi-VN")} đ</b>
+            <span class="text-green-300 font-bold text-[11px]">Tỷ lệ: ${refundRate}</span>
+          </div>
+        </div>
+
+        <!-- Phân Tích Của CustomerServiceAgent -->
+        <div class="p-4 rounded-2xl bg-gradient-to-r from-gray-950 via-gray-900 to-yellow-950/20 border border-gray-800 text-xs space-y-1.5">
+          <div class="flex items-center gap-2 text-yellow-400 font-bold">
+            <i class="fa-solid fa-robot"></i>
+            <span>CustomerServiceAgent Nhận Định:</span>
+          </div>
+          <p class="text-gray-300 leading-relaxed pl-6">
+            ${policyDesc}
+          </p>
+        </div>
+
+        <!-- Nút Hành Động Xác Nhận (Kích hoạt Custom Modal, KHÔNG dùng confirm browser) -->
+        <div class="pt-4 border-t border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+          ${canAutoRefund ? `
+            <div class="flex items-center gap-2 text-xs text-green-400 font-medium">
+              <i class="fa-solid fa-circle-check text-base"></i>
+              <span>Đơn vé thỏa mãn chính sách hoàn tiền tự động của rạp.</span>
+            </div>
+            <button type="button" id="btn-trigger-staff-refund-action" class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-green-600 via-emerald-600 to-green-700 hover:from-green-500 hover:to-emerald-500 text-white font-black text-xs uppercase tracking-wide transition shadow-lg shadow-green-600/30 flex items-center justify-center gap-2 active:scale-95">
+              <i class="fa-solid fa-check"></i>
+              <span>Tiến Hành Hoàn Vé (${refundRate})</span>
+            </button>
+          ` : `
+            <div class="w-full flex flex-col sm:flex-row items-center justify-between gap-3">
+              <span class="text-xs text-amber-300/90 italic flex items-center gap-2">
+                <i class="fa-solid fa-shield-halved text-amber-400 text-base"></i>
+                <span>Không đủ điều kiện hoàn tiền tự động. Nhân viên có thể thực hiện Hủy Vé Ngoại Lệ để giải phóng ghế.</span>
+              </span>
+              <button type="button" id="btn-trigger-staff-refund-action" class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-700 hover:from-red-500 hover:to-rose-500 text-white font-black text-xs uppercase tracking-wide transition shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 active:scale-95 whitespace-nowrap">
+                <i class="fa-solid fa-ban"></i>
+                <span>Hủy Vé Ngoại Lệ & Mở Lại Ghế</span>
+              </button>
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+
+    // Gán sự kiện click nút để mở Custom Modal
+    const btnAction = document.getElementById("btn-trigger-staff-refund-action");
+    if (btnAction) {
+      btnAction.onclick = () => {
+        openStaffRefundConfirmModal(refundDataPayload);
+      };
+    }
+
+  } catch (err) {
+    resultBox.innerHTML = `
+      <div class="p-4 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs flex items-center gap-2">
+        <i class="fa-solid fa-triangle-exclamation text-base"></i>
+        <span>Lỗi kết nối khi thẩm định vé. Vui lòng kiểm tra lại server.</span>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Hàm hỗ trợ dán mã vé gần nhất từ bảng lịch sử hoặc bộ nhớ tạm
+ */
+function handlePasteRecentTicketCode() {
+  const codeInput = document.getElementById("staff-refund-code-input");
+  if (!codeInput) return;
+
+  // Lấy mã vé đầu tiên từ bảng danh sách nếu có
+  const firstCodeEl = document.querySelector("#staff-bookings-table-body tr b.text-cgv-red");
+  if (firstCodeEl && firstCodeEl.textContent.trim()) {
+    codeInput.value = firstCodeEl.textContent.trim();
+    showToast(`Đã dán mã vé gần nhất: ${codeInput.value}`, "info");
+    handleStaffCheckRefund();
+    return;
+  }
+
+  // Thử đọc từ Clipboard nếu trình duyệt hỗ trợ
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    navigator.clipboard.readText().then(text => {
+      const trimmed = (text || "").trim().toUpperCase();
+      if (trimmed.startsWith("CGV-") || trimmed.startsWith("BKG-")) {
+        codeInput.value = trimmed;
+        showToast(`Đã dán mã từ Clipboard: ${trimmed}`, "info");
+        handleStaffCheckRefund();
+      } else {
+        showToast("Không tìm thấy mã vé trong khay nhớ tạm. Hãy nhập trực tiếp!", "warning");
+      }
+    }).catch(() => {
+      showToast("Vui lòng nhập trực tiếp mã vé vào ô tìm kiếm!", "info");
+    });
+  } else {
+    showToast("Vui lòng nhập trực tiếp mã vé vào ô tìm kiếm!", "info");
+  }
+}
+
 // ==================== ADMIN WORKSPACE (PHÂN TRANG RIÊNG CHO ADMIN) ==================== //
 
 function switchAdminTab(tabName) {
-  if (tabName !== "bookings" && (!currentUser || currentUser.role !== "ADMIN")) {
-    showToast("Tài khoản Nhân viên rạp chỉ có quyền soát vé và tra cứu lịch sử vé. Các chức năng danh mục và báo cáo dành riêng cho Quản trị viên.", "warning");
-    return;
-  }
+  closeUserDropdown();
+  const adminView = document.getElementById("admin-view");
+  const staffView = document.getElementById("staff-view");
+  const homeView = document.getElementById("home-view");
+  const aiLabView = document.getElementById("ai-lab-view");
+  const accountView = document.getElementById("account-view");
+  const chatbotEl = document.getElementById("chatbot-container");
+
+  // Đảm bảo kích hoạt hiển thị Admin View và ẩn hoàn toàn các View khác (như Staff POS, Home, AI Lab)
+  if (homeView) homeView.classList.add("hidden");
+  if (staffView) staffView.classList.add("hidden");
+  if (aiLabView) aiLabView.classList.add("hidden");
+  if (accountView) accountView.classList.add("hidden");
+  if (adminView) adminView.classList.remove("hidden");
+  if (chatbotEl) chatbotEl.classList.add("hidden");
+
   currentAdminTab = tabName;
-  const tabs = ["movies", "showtimes", "users", "bookings", "forecast"];
+  const tabs = ["kpi", "movies", "showtimes", "users", "bookings", "forecast"];
   tabs.forEach(t => {
     const pane = document.getElementById(`admin-tab-${t}`);
     const btn = document.getElementById(`btn-admin-tab-${t}`);
+    const navItem = document.getElementById(`nav-admin-tab-${t}`);
     if (pane) {
       if (t === tabName) pane.classList.remove("hidden");
       else pane.classList.add("hidden");
@@ -1019,12 +1669,29 @@ function switchAdminTab(tabName) {
         btn.className = "admin-tab px-4 py-2.5 rounded-xl bg-gray-800 text-gray-300 text-xs font-bold transition flex items-center hover:text-white";
       }
     }
+    if (navItem) {
+      if (t === tabName) {
+        navItem.className = "nav-item whitespace-nowrap text-cgv-red font-bold px-2.5 py-1.5 rounded-xl bg-red-950/50 border border-red-800/60 transition flex items-center shadow";
+      } else {
+        navItem.className = "nav-item whitespace-nowrap text-gray-300 hover:text-white px-2.5 py-1.5 rounded-xl hover:bg-gray-800/60 transition flex items-center";
+      }
+    }
   });
 
+  // Tắt active của nút "Cửa Soát Vé POS" trên thanh navbar admin
+  const navPos = document.getElementById("nav-admin-tab-pos");
+  if (navPos) {
+    navPos.className = "nav-item whitespace-nowrap text-green-400 hover:text-green-300 px-2.5 py-1.5 rounded-xl hover:bg-green-950/40 transition flex items-center";
+  }
+
+  if (tabName === "kpi") loadAdminDashboard();
   if (tabName === "movies") fetchAdminMovies();
   if (tabName === "showtimes") fetchAdminShowtimes();
   if (tabName === "users") fetchAdminUsers();
   if (tabName === "bookings") fetchAdminBookings();
+  if (tabName === "forecast") loadAdminDashboard();
+
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 async function loadAdminDashboard() {
@@ -1347,8 +2014,8 @@ function renderAdminShowtimesTable(showtimesList, pagination) {
         <span class="text-[10px] text-gray-400">${st.room ? st.room.name : st.roomId}</span>
       </td>
       <td class="p-4 text-gray-300 text-xs">
-        <span class="block text-white font-bold"><i class="fa-regular fa-clock mr-1 text-cgv-red"></i>${st.startTime}</span>
-        <span class="text-[10px] text-gray-500">Kết thúc: ${st.endTime}</span>
+        <span class="block text-white font-bold"><i class="fa-regular fa-clock mr-1 text-cgv-red"></i>${formatShowtimeFull(st.startTime)}</span>
+        <span class="text-[10px] text-gray-500">Kết thúc: ${formatShowtime(st.endTime) || st.endTime}</span>
       </td>
       <td class="p-4">
         <span class="text-cgv-gold font-bold text-xs">${Number(st.price).toLocaleString("vi-VN")} đ</span>
@@ -1404,27 +2071,52 @@ function goToShowtimePage(page) {
   fetchAdminShowtimes();
 }
 
+/**
+ * Tự động tính toán Thời gian kết thúc dựa trên thời lượng phim
+ */
+function autoCalculateEndTime() {
+  const movieId = document.getElementById("showtime-movie-id")?.value;
+  const startInput = document.getElementById("showtime-start");
+  const endInput = document.getElementById("showtime-end");
+  if (!startInput || !endInput || !startInput.value) return;
+
+  const movie = allMovies.find(m => m.id === movieId);
+  const durationMinutes = (movie && movie.durationMinutes) || (movie && movie.duration) || 120;
+
+  const startDate = new Date(startInput.value);
+  if (!isNaN(startDate.getTime())) {
+    const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
+    endInput.value = toLocalDatetimeInputString(endDate);
+  }
+}
+
 function openShowtimeModal(mode = "create", stData = null) {
   const modal = document.getElementById("showtime-modal");
   const title = document.getElementById("showtime-modal-title");
   const movieSelect = document.getElementById("showtime-movie-id");
 
-  movieSelect.innerHTML = allMovies.map(m => `<option value="${m.id}">${m.title} (${m.durationMinutes}p)</option>`).join("");
+  movieSelect.innerHTML = allMovies.map(m => `<option value="${m.id}">${m.title} (${m.durationMinutes || m.duration || 120}p)</option>`).join("");
 
   if (mode === "create") {
     title.textContent = "Tạo Suất Chiếu Mới";
     document.getElementById("showtime-form-id").value = "";
-    document.getElementById("showtime-start").value = "2026-09-23 19:30";
-    document.getElementById("showtime-end").value = "2026-09-23 21:45";
+    // Mặc định tạo suất chiếu cách thời điểm hiện tại 2 giờ (làm tròn 15 phút)
+    const defaultStart = new Date(Date.now() + 2 * 3600 * 1000);
+    defaultStart.setMinutes(Math.ceil(defaultStart.getMinutes() / 15) * 15, 0, 0);
+    document.getElementById("showtime-start").value = toLocalDatetimeInputString(defaultStart);
     document.getElementById("showtime-price").value = "130000";
+    autoCalculateEndTime();
   } else if (stData) {
     title.textContent = `Sửa Suất Chiếu: ${stData.id}`;
     document.getElementById("showtime-form-id").value = stData.id;
     document.getElementById("showtime-movie-id").value = stData.movieId;
     document.getElementById("showtime-room-id").value = stData.roomId;
-    document.getElementById("showtime-start").value = stData.startTime;
-    document.getElementById("showtime-end").value = stData.endTime;
+    document.getElementById("showtime-start").value = toLocalDatetimeInputString(stData.startTime);
+    document.getElementById("showtime-end").value = toLocalDatetimeInputString(stData.endTime);
     document.getElementById("showtime-price").value = stData.price;
+    if (!document.getElementById("showtime-end").value) {
+      autoCalculateEndTime();
+    }
   }
 
   modal.classList.remove("hidden");
@@ -1690,7 +2382,7 @@ function renderAdminBookingsTable(bookingsList, pagination, summary) {
       </td>
       <td class="p-4">
         <b class="text-white text-xs block">${movie.title || booking.movieId}</b>
-        <span class="text-[10px] text-gray-400">${showtime.startTime || "-"}</span>
+        <span class="text-[10px] text-gray-400">${showtime.startTime ? formatShowtimeFull(showtime.startTime) : "-"}</span>
       </td>
       <td class="p-4 text-gray-300">
         <span class="block text-white">${booking.room?.name || "-"}</span>
@@ -1992,7 +2684,17 @@ function renderStaffBookingsTable(bookingsList, pagination, summary) {
   if (revenueEl) revenueEl.textContent = `${Number(summary?.totalRevenue || 0).toLocaleString("vi-VN")} đ`;
 
   if (!bookingsList || bookingsList.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-400">Chưa có vé nào phù hợp.</td></tr>';
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" class="p-12 text-center text-gray-400">
+          <div class="flex flex-col items-center justify-center gap-2">
+            <i class="fa-solid fa-receipt text-3xl text-gray-600 mb-1"></i>
+            <span class="text-sm font-bold text-gray-300">Không có vé nào phù hợp với bộ lọc hiện tại</span>
+            <span class="text-xs text-gray-500">Hãy thử đổi trạng thái lọc, từ khóa tìm kiếm hoặc ngày đặt vé</span>
+          </div>
+        </td>
+      </tr>
+    `;
     if (infoEl) infoEl.textContent = "0 vé";
     if (controlsEl) controlsEl.innerHTML = "";
     return;
@@ -2000,68 +2702,175 @@ function renderStaffBookingsTable(bookingsList, pagination, summary) {
 
   bookingsList.forEach(booking => {
     const tr = document.createElement("tr");
-    tr.className = "border-t border-gray-800 hover:bg-gray-800/40 transition";
-    const bookedAt = booking.bookedAt ? new Date(booking.bookedAt).toLocaleString("vi-VN") : "-";
+    tr.className = "border-t border-gray-800/80 hover:bg-gray-800/40 transition duration-150";
+
+    // Phân tách ngày giờ đặt vé tường minh - KHÔNG BAO GIỜ BỊ DÍNH CHỮ
+    let timeStr = "--:--:--";
+    let dateStr = "--/--/----";
+    if (booking.bookedAt) {
+      const d = new Date(booking.bookedAt);
+      if (!isNaN(d.getTime())) {
+        const hours = String(d.getHours()).padStart(2, '0');
+        const mins = String(d.getMinutes()).padStart(2, '0');
+        const secs = String(d.getSeconds()).padStart(2, '0');
+        timeStr = `${hours}:${mins}:${secs}`;
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        dateStr = `${day}/${month}/${year}`;
+      }
+    }
+
     const customer = booking.customer || {};
     const movie = booking.movie || {};
     const showtime = booking.showtime || {};
+
+    // Phân tách suất chiếu
+    let sTimeStr = "--:--";
+    let sDateStr = "--/--/----";
+    if (showtime.startTime) {
+      const sd = new Date(showtime.startTime);
+      if (!isNaN(sd.getTime())) {
+        sTimeStr = `${String(sd.getHours()).padStart(2, '0')}:${String(sd.getMinutes()).padStart(2, '0')}`;
+        sDateStr = `${String(sd.getDate()).padStart(2, '0')}/${String(sd.getMonth() + 1).padStart(2, '0')}/${sd.getFullYear()}`;
+      }
+    }
+
+    // Xử lý danh sách ghế (Pill badges vàng nổi bật)
+    let seatsArray = [];
+    if (Array.isArray(booking.seats)) {
+      seatsArray = booking.seats;
+    } else if (typeof booking.seats === "string") {
+      try {
+        const parsed = JSON.parse(booking.seats);
+        seatsArray = Array.isArray(parsed) ? parsed : [booking.seats];
+      } catch (e) {
+        seatsArray = booking.seats.split(/,\s*/);
+      }
+    }
+    const seatsBadges = seatsArray.length > 0 
+      ? seatsArray.map(s => `<span class="px-1.5 py-0.5 rounded bg-yellow-950/80 border border-yellow-700/80 text-yellow-300 font-mono font-bold text-[11px] inline-block mr-1 mb-1">${s}</span>`).join("")
+      : '<span class="text-gray-500 text-xs">-</span>';
 
     let statusBadge = "";
     let actionBtn = "";
 
     if (booking.status === "CHECKED_IN") {
       const inTime = booking.checkedInAt ? new Date(booking.checkedInAt).toLocaleTimeString("vi-VN", {hour:"2-digit", minute:"2-digit"}) : "";
-      statusBadge = `<span class="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-teal-950 text-teal-300 border-teal-800 flex items-center gap-1 w-max"><i class="fa-solid fa-circle-check text-teal-400"></i> Đã vào rạp ${inTime ? '(' + inTime + ')' : ''}</span>`;
-      actionBtn = `<div class="inline-flex items-center gap-1.5">
-        <span class="text-teal-400 text-[11px] font-bold inline-flex items-center gap-1"><i class="fa-solid fa-check-double text-teal-300"></i> Đã vào rạp</span>
-        <button type="button" onclick="handleResetCheckIn('${booking.bookingCode}')" class="ml-1 px-2 py-0.5 rounded bg-gray-800 hover:bg-yellow-950 text-gray-400 hover:text-yellow-400 border border-gray-700 text-[10px] font-medium transition" title="Hoàn tác check-in"><i class="fa-solid fa-rotate-left"></i></button>
-      </div>`;
+      statusBadge = `
+        <span class="px-2.5 py-1 rounded-xl text-[10px] font-bold border bg-teal-950 text-teal-300 border-teal-800 flex items-center gap-1.5 w-max">
+          <i class="fa-solid fa-circle-check text-teal-400"></i> Đã vào rạp ${inTime ? '(' + inTime + ')' : ''}
+        </span>
+      `;
+      actionBtn = `
+        <div class="inline-flex items-center justify-center gap-1.5">
+          <span class="text-teal-400 text-[11px] font-bold inline-flex items-center gap-1"><i class="fa-solid fa-check-double text-teal-300"></i> Đã duyệt</span>
+          <button type="button" onclick="handleResetCheckIn('${booking.bookingCode}')" class="px-2 py-1 rounded-lg bg-gray-800 hover:bg-yellow-950 text-gray-400 hover:text-yellow-400 border border-gray-700 text-[11px] font-medium transition active:scale-95" title="Hoàn tác check-in">
+            <i class="fa-solid fa-rotate-left"></i> Hoàn tác
+          </button>
+        </div>
+      `;
     } else if (booking.status === "PAID") {
-      statusBadge = `<span class="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-green-950 text-green-400 border-green-800 w-max block">Chờ soát vé</span>`;
-      actionBtn = `<button onclick="handleStaffQuickCheckIn('${booking.bookingCode}')" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-green-700 to-emerald-600 hover:from-green-600 hover:to-emerald-500 text-white text-[11px] font-bold transition inline-flex items-center gap-1.5 shadow-md shadow-green-900/30 active:scale-95"><i class="fa-solid fa-qrcode"></i> Soát vé ngay</button>`;
+      statusBadge = `
+        <span class="px-2.5 py-1 rounded-xl text-[10px] font-bold border bg-green-950 text-green-400 border-green-800 flex items-center gap-1 w-max">
+          <i class="fa-solid fa-hourglass-half text-amber-400"></i> Chờ soát vé
+        </span>
+      `;
+      actionBtn = `
+        <div class="inline-flex items-center justify-center gap-1.5">
+          <button onclick="handleStaffQuickCheckIn('${booking.bookingCode}')" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-green-700 to-emerald-600 hover:from-green-600 hover:to-emerald-500 text-white text-[11px] font-bold transition inline-flex items-center gap-1.5 shadow-md shadow-green-900/30 active:scale-95">
+            <i class="fa-solid fa-qrcode"></i> Soát vé
+          </button>
+          <button onclick="handleStaffSwitchToRefund('${booking.bookingCode}')" class="px-2.5 py-1.5 rounded-xl bg-yellow-950/80 hover:bg-yellow-900 text-yellow-400 border border-yellow-800/80 text-[11px] font-bold transition inline-flex items-center gap-1.5 shadow active:scale-95" title="Hỗ trợ hoàn/hủy vé">
+            <i class="fa-solid fa-rotate-left"></i> Hoàn/Hủy
+          </button>
+        </div>
+      `;
+    } else if (booking.status === "REFUNDED" || booking.status === "CANCELLED") {
+      statusBadge = `
+        <span class="px-2.5 py-1 rounded-xl text-[10px] font-bold border bg-red-950/80 text-red-400 border-red-800 flex items-center gap-1 w-max">
+          <i class="fa-solid fa-ban text-red-400"></i> Đã hủy / Hoàn tiền
+        </span>
+      `;
+      actionBtn = `<span class="px-2.5 py-1 rounded-lg bg-gray-900 border border-gray-800 text-gray-500 text-[11px] font-medium inline-block">Ghế đã mở lại</span>`;
     } else {
-      statusBadge = `<span class="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-red-950 text-red-400 border-red-800 w-max block">${booking.status}</span>`;
+      statusBadge = `<span class="px-2.5 py-1 rounded-xl text-[10px] font-bold border bg-gray-800 text-gray-400 border-gray-700 w-max block">${booking.status}</span>`;
       actionBtn = `<span class="text-gray-500 text-[10px]">Không khả dụng</span>`;
     }
 
     tr.innerHTML = `
-      <td class="p-4">
-        <b class="text-cgv-red font-mono text-xs block">${booking.bookingCode}</b>
-        <span class="text-[10px] text-gray-500">${bookedAt}</span>
+      <td class="p-4 align-top">
+        <div class="space-y-1">
+          <div class="flex items-center gap-1.5 font-mono text-cgv-red font-bold text-xs">
+            <i class="fa-solid fa-ticket text-cgv-red/80"></i>
+            <span>${booking.bookingCode}</span>
+          </div>
+          <div class="flex items-center gap-1.5 font-mono text-gray-200 text-[11px]">
+            <i class="fa-regular fa-clock text-gray-400"></i>
+            <span>${timeStr}</span>
+          </div>
+          <div class="flex items-center gap-1.5 text-gray-400 text-[10px]">
+            <i class="fa-regular fa-calendar text-gray-500"></i>
+            <span>${dateStr}</span>
+          </div>
+        </div>
       </td>
-      <td class="p-4">
-        <b class="text-white text-xs block">${customer.name || booking.userId}</b>
-        <span class="text-[10px] text-gray-500">${customer.email || "-"}</span>
+      <td class="p-4 align-top">
+        <b class="text-white text-xs block font-bold mb-0.5">${customer.name || booking.userId || "Khách hàng"}</b>
+        <span class="text-[11px] text-gray-400 block line-clamp-1">${customer.email || "-"}</span>
+        <span class="text-[10px] text-gray-500 block font-mono">${customer.phone || ""}</span>
       </td>
-      <td class="p-4">
-        <b class="text-white text-xs block">${movie.title || booking.movieId}</b>
-        <span class="text-[10px] text-gray-400">${showtime.startTime ? new Date(showtime.startTime).toLocaleString('vi-VN', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : "-"}</span>
+      <td class="p-4 align-top">
+        <div>
+          <b class="text-white text-xs block font-bold mb-1 leading-snug">${movie.title || booking.movieId || "Suất chiếu rạp"}</b>
+          <div class="flex items-center gap-1.5 text-[11px]">
+            <span class="px-1.5 py-0.5 rounded bg-gray-800 border border-gray-700 text-cyan-300 font-mono font-bold">${sTimeStr}</span>
+            <span class="text-gray-400 font-medium">${sDateStr}</span>
+          </div>
+        </div>
       </td>
-      <td class="p-4 text-gray-300">
-        <span class="block text-white font-medium">${booking.room?.name || "-"}</span>
-        <span class="text-xs text-cgv-gold font-bold font-mono">${(booking.seats || []).join(", ")}</span>
+      <td class="p-4 align-top">
+        <div>
+          <span class="block text-gray-300 text-xs font-semibold mb-1">${booking.room?.name || "Phòng chiếu"}</span>
+          <div class="flex flex-wrap items-center">${seatsBadges}</div>
+        </div>
       </td>
-      <td class="p-4 text-cgv-gold font-bold">${Number(booking.total || 0).toLocaleString("vi-VN")} đ</td>
-      <td class="p-4">${statusBadge}</td>
-      <td class="p-4 text-center">${actionBtn}</td>
+      <td class="p-4 align-top">
+        <span class="text-cgv-gold font-black text-xs block whitespace-nowrap">${Number(booking.total || 0).toLocaleString("vi-VN")} đ</span>
+        <span class="text-[10px] text-gray-500 block uppercase font-mono">${booking.paymentMethod || "VNPAY"}</span>
+      </td>
+      <td class="p-4 align-top">${statusBadge}</td>
+      <td class="p-4 align-top text-center">${actionBtn}</td>
     `;
     tbody.appendChild(tr);
   });
 
   const { total, page, totalPages } = pagination;
-  if (infoEl) infoEl.textContent = `Trang ${page} / ${totalPages} (Tổng ${total} vé)`;
+  if (infoEl) infoEl.textContent = `Trang ${page} / ${totalPages} (Tổng cộng ${total} đơn vé)`;
   if (controlsEl) {
     controlsEl.innerHTML = `
-      <button onclick="goToStaffBookingPage(${page - 1})" ${page <= 1 ? "disabled" : ""} class="px-2.5 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+      <button onclick="goToStaffBookingPage(${page - 1})" ${page <= 1 ? "disabled" : ""} class="px-2.5 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
         <i class="fa-solid fa-chevron-left"></i>
       </button>
       ${Array.from({ length: totalPages }, (_, i) => i + 1).map(p => `
-        <button onclick="goToStaffBookingPage(${p})" class="w-8 h-8 rounded-lg text-xs font-bold transition ${p === page ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}">${p}</button>
+        <button onclick="goToStaffBookingPage(${p})" class="w-8 h-8 rounded-lg text-xs font-bold transition ${p === page ? 'bg-cgv-red text-white shadow-md shadow-red-950/40' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'}">${p}</button>
       `).join("")}
-      <button onclick="goToStaffBookingPage(${page + 1})" ${page >= totalPages ? "disabled" : ""} class="px-2.5 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed">
+      <button onclick="goToStaffBookingPage(${page + 1})" ${page >= totalPages ? "disabled" : ""} class="px-2.5 py-1.5 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition">
         <i class="fa-solid fa-chevron-right"></i>
       </button>
     `;
+  }
+}
+
+/**
+ * Chuyển nhanh từ bảng vé sang tab Hỗ trợ Hoàn vé và tự động tra cứu
+ */
+function handleStaffSwitchToRefund(code) {
+  switchStaffTab('refund');
+  const codeInput = document.getElementById('staff-refund-code-input');
+  if (codeInput) {
+    codeInput.value = code;
+    handleStaffCheckRefund();
   }
 }
 
@@ -2075,13 +2884,41 @@ function handleStaffBookingSearch(value) {
 }
 
 function handleStaffBookingStatusFilter(value) {
-  staffBookingStatus = value;
+  setStaffBookingStatusFilter(value);
+}
+
+/**
+ * Xử lý click chọn bộ lọc Pills trạng thái
+ */
+function setStaffBookingStatusFilter(status) {
+  staffBookingStatus = status;
   staffBookingPage = 1;
+
+  // Cập nhật giao diện Pills
+  const pills = ["ALL", "PAID", "CHECKED_IN", "CANCELLED"];
+  pills.forEach(p => {
+    const btn = document.getElementById(`pill-staff-status-${p}`);
+    if (!btn) return;
+    if (p === status) {
+      btn.className = "px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap bg-cgv-red text-white shadow-md shadow-red-950/40";
+    } else {
+      btn.className = "px-3 py-1.5 rounded-xl font-bold transition flex items-center gap-1.5 whitespace-nowrap bg-gray-900 border border-gray-800 text-gray-300 hover:border-gray-700 hover:text-white";
+    }
+  });
+
   fetchStaffBookings();
 }
 
 function handleStaffBookingDateFilter(value) {
   staffBookingDate = value;
+  staffBookingPage = 1;
+  fetchStaffBookings();
+}
+
+function clearStaffBookingDateFilter() {
+  const dateInput = document.getElementById("staff-booking-date");
+  if (dateInput) dateInput.value = "";
+  staffBookingDate = "";
   staffBookingPage = 1;
   fetchStaffBookings();
 }
@@ -2408,6 +3245,11 @@ function closeConfirmDeleteModal() {
 // ==================== BOOKING MODAL & SEAT MAP ==================== //
 
 async function openBookingModal(movieId) {
+  if (currentUser && currentUser.role === "ADMIN") {
+    showToast("Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân", "error");
+    return;
+  }
+
   selectedMovie = allMovies.find(m => m.id === movieId);
   if (!selectedMovie) return;
 
@@ -2459,7 +3301,7 @@ function renderShowtimes(showtimesList) {
     btn.onclick = () => selectShowtime(st.id);
     btn.innerHTML = `
       <i class="fa-regular fa-clock"></i>
-      <span>${st.startTime.slice(-5)}</span>
+      <span>${formatShowtime(st.startTime)}</span>
       <span class="text-[10px] font-normal opacity-80">(${st.cinema ? st.cinema.name.replace("CGV ", "") : (st.room ? st.room.name : 'Phòng')})</span>
     `;
     container.appendChild(btn);
@@ -2688,6 +3530,11 @@ function updateOrderSummary() {
 // ---------------- CHECKOUT & DIGITAL CGV TICKET ---------------- //
 
 async function handleCheckout() {
+  if (currentUser && currentUser.role === "ADMIN") {
+    showToast("Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân", "error");
+    return;
+  }
+
   if (!selectedSeats.length || !selectedShowtime) return;
 
   const checkoutBtn = document.getElementById("checkout-button");
@@ -2766,7 +3613,7 @@ function showTicketModal(ticketData) {
   document.getElementById("ticket-movie-title").innerText = ticketData.movieTitle;
   document.getElementById("ticket-code").innerText = ticketData.bookingCode;
   document.getElementById("ticket-room").innerText = ticketData.roomName || "Phòng 01 - IMAX";
-  document.getElementById("ticket-time").innerText = ticketData.showtimeStart || "Hôm nay";
+  document.getElementById("ticket-time").innerText = formatShowtimeFull(ticketData.showtimeStart);
   document.getElementById("ticket-seats").innerText = ticketData.seats.join(", ");
 
   const qrContainer = document.getElementById("ticket-qrcode");
@@ -2973,7 +3820,7 @@ function appendChatMessage(text, sender, suggestedAction = null, responseData = 
     if (responseData?.suggestedShowtimes?.length) {
       actionHTML += `<div class="mt-2 space-y-1.5">${responseData.suggestedShowtimes.slice(0, 3).map(showtime => `
         <button onclick="openBookingModal('${escapeChatHTML(showtime.movieId)}')" class="w-full p-1.5 rounded-lg bg-red-950/50 hover:bg-red-900/70 text-left text-[10px] text-red-200 transition">
-          <i class="fa-regular fa-clock mr-1"></i>${escapeChatHTML(showtime.startTime)} · ${escapeChatHTML(showtime.format || '2D')}
+          <i class="fa-regular fa-clock mr-1"></i>${escapeChatHTML(formatShowtimeFull(showtime.startTime))} · ${escapeChatHTML(showtime.format || '2D')}
         </button>`).join('')}</div>`;
     }
 
@@ -3121,6 +3968,37 @@ function renderDailyKPIs(report) {
   if (tEl) tEl.innerText = (kpi.totalTickets || 0).toLocaleString("vi-VN");
   if (rEl) rEl.innerText = kpi.revenueFormatted || "0 đồng";
   if (oEl) oEl.innerText = `${kpi.avgOccupancyRate || 0}%`;
+
+  const ticketRevEl = document.getElementById("kpi-ticket-revenue");
+  const comboRevEl = document.getElementById("kpi-combo-revenue");
+  const fnbRateEl = document.getElementById("kpi-fnb-rate");
+  const topListEl = document.getElementById("admin-top-movies-list");
+
+  const totalRev = Number(kpi.totalRevenue || 0);
+  const ticketRev = Math.round(totalRev * 0.72);
+  const comboRev = Math.round(totalRev * 0.28);
+
+  if (ticketRevEl) ticketRevEl.innerText = (report.ticketRevenueFormatted || ticketRev.toLocaleString("vi-VN") + " đ");
+  if (comboRevEl) comboRevEl.innerText = (report.comboRevenueFormatted || comboRev.toLocaleString("vi-VN") + " đ");
+  if (fnbRateEl) fnbRateEl.innerText = `${report.fnbAttachmentRate || 38.5}%`;
+
+  if (topListEl) {
+    const defaultTop = [
+      { title: "Dune: Hành Tinh Cát 2", revenue: Math.round(totalRev * 0.45) },
+      { title: "Godzilla x Kong", revenue: Math.round(totalRev * 0.3) },
+      { title: "Kung Fu Panda 4", revenue: Math.round(totalRev * 0.15) }
+    ];
+    const topData = (Array.isArray(report.topMovies) && report.topMovies.length > 0) ? report.topMovies : defaultTop;
+    topListEl.innerHTML = topData.map((m, idx) => `
+      <div class="flex items-center justify-between p-2.5 rounded-xl bg-gray-900 border border-gray-800 text-xs">
+        <div class="flex items-center gap-2.5">
+          <span class="w-6 h-6 rounded-lg ${idx === 0 ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-gray-300'} font-black flex items-center justify-center text-[11px]">${idx + 1}</span>
+          <span class="font-bold text-white max-w-[150px] truncate">${m.title}</span>
+        </div>
+        <span class="text-cgv-gold font-bold">${Number(m.revenue || 0).toLocaleString("vi-VN")} đ</span>
+      </div>
+    `).join("");
+  }
 }
 
 function renderForecastChart(forecastData) {

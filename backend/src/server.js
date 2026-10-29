@@ -76,6 +76,39 @@ function requirePermission(permission) {
   };
 }
 
+/**
+ * Middleware ngăn chặn Quản trị viên (ADMIN) sử dụng tài khoản điều hành để đặt vé cá nhân
+ * Đảm bảo nguyên tắc phân tách trách nhiệm nghiệp vụ (Separation of Concerns & Role Isolation)
+ */
+function preventAdminPersonalBooking(req, res, next) {
+  let role = "CUSTOMER";
+  let currentUser = null;
+
+  const authHeader = req.header("authorization") || req.header("Authorization");
+  if (authHeader) {
+    currentUser = authService.verifyToken(authHeader);
+    if (currentUser) {
+      role = (currentUser.role || "CUSTOMER").toUpperCase();
+    }
+  }
+
+  if (!currentUser && req.header("x-demo-role")) {
+    const demoRole = req.header("x-demo-role").toUpperCase();
+    if (ROLE_PERMISSIONS[demoRole]) {
+      role = demoRole;
+    }
+  }
+
+  if (role === "ADMIN") {
+    return res.status(403).json({
+      status: "FORBIDDEN",
+      message: "Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân"
+    });
+  }
+
+  next();
+}
+
 app.use(cors());
 app.use(express.json());
 
@@ -225,7 +258,7 @@ app.get("/api/v1/cinemas", (req, res) => {
 
 // 8. Suất chiếu & Sơ đồ ghế
 app.get("/api/v1/showtimes", (req, res) => {
-  const { movieId, roomId, cinemaId } = req.query;
+  const { movieId, roomId, cinemaId, date } = req.query;
   let result = showtimes;
 
   if (movieId) {
@@ -246,12 +279,21 @@ app.get("/api/v1/showtimes", (req, res) => {
     };
   });
 
+  let filtered = detailed;
+
   if (cinemaId) {
-    const byCinema = detailed.filter(st => st.room && st.room.cinemaId === cinemaId);
-    return res.json({ status: "SUCCESS", data: byCinema });
+    filtered = filtered.filter(st => st.room && st.room.cinemaId === cinemaId);
   }
 
-  res.json({ status: "SUCCESS", data: detailed });
+  if (date) {
+    filtered = filtered.filter(st => {
+      if (!st.startTime) return false;
+      const stDate = String(st.startTime).slice(0, 10);
+      return stDate === date;
+    });
+  }
+
+  res.json({ status: "SUCCESS", data: filtered });
 });
 
 app.get("/api/v1/showtimes/:id/seats", (req, res) => {
@@ -294,7 +336,7 @@ app.get("/api/v1/showtimes/:id/seats", (req, res) => {
 });
 
 // 9. Khóa ghế thời gian thực (10 phút TTL)
-app.post("/api/v1/bookings/lock-seats", (req, res) => {
+app.post("/api/v1/bookings/lock-seats", preventAdminPersonalBooking, (req, res) => {
   const { showtimeId, seatIds, userId } = req.body;
   if (!showtimeId || !seatIds || !seatIds.length) {
     return res.status(400).json({ status: "ERROR", message: "Thiếu thông tin suất chiếu hoặc danh sách ghế" });
@@ -529,7 +571,7 @@ app.post("/api/v1/bookings/create-demo-ticket", requirePermission("bookings.scan
 });
 
 // 12. Thanh toán & Phát hành vé điện tử CGV (Tích lũy chi tiêu & thăng hạng CGV VIP)
-app.post("/api/v1/payments/checkout", (req, res) => {
+app.post("/api/v1/payments/checkout", preventAdminPersonalBooking, (req, res) => {
   const { showtimeId, seatIds, userId, comboIds, customerInfo } = req.body;
 
   if (!showtimeId || !Array.isArray(seatIds) || seatIds.length === 0 || !userId) {
@@ -573,6 +615,7 @@ app.post("/api/v1/payments/checkout", (req, res) => {
 
   const newBooking = {
     bookingCode,
+    qrToken,
     userId,
     movieId: showtime.movieId,
     showtimeId: showtime.id,
@@ -761,6 +804,7 @@ app.post("/api/v1/support/refund", (req, res) => {
       if (booking.showtimeId && Array.isArray(booking.seats)) {
         seatLockService.releaseBookedSeats(booking.showtimeId, booking.seats);
       }
+      dbService.updateBookingStatus(booking.bookingCode, "REFUNDED").catch(e => console.warn("Lỗi cập nhật refund MySQL:", e.message));
     }
   }
   res.status(httpStatus).json({ status: result.success ? "SUCCESS" : "ERROR", agent: "CustomerServiceAgent_v1", data: result });
@@ -769,7 +813,7 @@ app.post("/api/v1/support/refund", (req, res) => {
 // ==================== ADMIN QUẢN TRỊ (CRUD, SEARCH & PAGINATION RIÊNG CHO ADMIN) ==================== //
 
 // 1. Quản lý Phim Admin: Tìm kiếm, Lọc và Phân trang (5 phim/trang)
-app.get("/api/v1/admin/movies", requirePermission("movies.read"), (req, res) => {
+app.get("/api/v1/admin/movies", requirePermission("movies.manage"), (req, res) => {
   const { search, genre, status, page = 1, limit = 5 } = req.query;
   let filtered = [...movies];
 
@@ -960,6 +1004,28 @@ app.post("/api/v1/admin/showtimes", requirePermission("showtimes.manage"), (req,
     return res.status(400).json({ status: "ERROR", message: "Phim hoặc phòng chiếu không tồn tại trong hệ thống." });
   }
 
+  // Kiểm tra chống trùng giờ chiếu cùng phòng
+  const newStart = new Date(startTime).getTime();
+  const movieObj = movies.find(m => m.id === movieId);
+  const durationMs = ((movieObj && movieObj.durationMinutes) || 120) * 60 * 1000;
+  const newEnd = endTime ? new Date(endTime).getTime() : newStart + durationMs;
+
+  const hasConflict = showtimes.some(st => {
+    if (st.roomId !== roomId) return false;
+    const stStart = new Date(st.startTime).getTime();
+    const stMovie = movies.find(m => m.id === st.movieId);
+    const stDuration = ((stMovie && stMovie.durationMinutes) || 120) * 60 * 1000;
+    const stEnd = st.endTime ? new Date(st.endTime).getTime() : stStart + stDuration;
+    return Math.max(newStart, stStart) < Math.min(newEnd, stEnd);
+  });
+
+  if (hasConflict) {
+    return res.status(400).json({
+      status: "ERROR",
+      message: "Phòng chiếu này đã có suất chiếu khác trong khoảng thời gian đã chọn! Vui lòng chọn giờ khác hoặc phòng khác."
+    });
+  }
+
   const newShowtime = {
     id: `st-${Date.now().toString().slice(-5)}`,
     movieId,
@@ -985,11 +1051,47 @@ app.put("/api/v1/admin/showtimes/:id", requirePermission("showtimes.manage"), (r
   }
   if (roomId) {
     if (!rooms.some(r => r.id === roomId)) return res.status(400).json({ status: "ERROR", message: "Phòng không tồn tại." });
-    showtime.roomId = roomId;
   }
+
+  // Kiểm tra chống trùng giờ chiếu cùng phòng khi cập nhật
+  const targetMovieId = movieId || showtime.movieId;
+  const targetRoomId = roomId || showtime.roomId;
+  const targetStartTime = startTime || showtime.startTime;
+  const targetEndTime = endTime || showtime.endTime;
+
+  const newStart = new Date(targetStartTime).getTime();
+  const movieObj = movies.find(m => m.id === targetMovieId);
+  const durationMs = ((movieObj && movieObj.durationMinutes) || 120) * 60 * 1000;
+  const newEnd = targetEndTime ? new Date(targetEndTime).getTime() : newStart + durationMs;
+
+  const hasConflict = showtimes.some(st => {
+    if (st.id === showtime.id || st.roomId !== targetRoomId) return false;
+    const stStart = new Date(st.startTime).getTime();
+    const stMovie = movies.find(m => m.id === st.movieId);
+    const stDuration = ((stMovie && stMovie.durationMinutes) || 120) * 60 * 1000;
+    const stEnd = st.endTime ? new Date(st.endTime).getTime() : stStart + stDuration;
+    return Math.max(newStart, stStart) < Math.min(newEnd, stEnd);
+  });
+
+  if (hasConflict) {
+    return res.status(400).json({
+      status: "ERROR",
+      message: "Phòng chiếu này đã có suất chiếu khác trong khoảng thời gian đã chọn! Vui lòng chọn giờ khác hoặc phòng khác."
+    });
+  }
+
+  if (roomId) showtime.roomId = roomId;
   if (startTime) showtime.startTime = startTime;
   if (endTime) showtime.endTime = endTime;
   if (price !== undefined) showtime.price = Number(price);
+
+  dbService.updateShowtime(showtime.id, {
+    movieId: showtime.movieId,
+    roomId: showtime.roomId,
+    startTime: showtime.startTime,
+    endTime: showtime.endTime,
+    price: showtime.price
+  }).catch(e => console.warn("Lỗi update showtime MySQL:", e.message));
 
   res.json({ status: "SUCCESS", data: showtime, message: "Đã cập nhật suất chiếu thành công!" });
 });
@@ -1164,7 +1266,8 @@ async function syncFromDatabase() {
       }
       const dbShowtimes = await dbService.getShowtimes();
       if (dbShowtimes && dbShowtimes.length > 0) {
-        showtimes.splice(0, showtimes.length, ...dbShowtimes);
+        const testShowtimes = showtimes.filter(st => st.id && st.id.startsWith("st-test-"));
+        showtimes.splice(0, showtimes.length, ...dbShowtimes, ...testShowtimes);
       }
       const dbUsers = await dbService.getUsers();
       if (dbUsers && dbUsers.length > 0) {
@@ -1172,7 +1275,18 @@ async function syncFromDatabase() {
       }
       const dbBookings = await dbService.getBookings();
       if (dbBookings && dbBookings.length > 0) {
-        bookings.splice(0, bookings.length, ...dbBookings);
+        const bookingMap = new Map();
+        dbBookings.forEach(b => bookingMap.set(b.bookingCode, b));
+        bookings.forEach(b => {
+          if (!bookingMap.has(b.bookingCode)) {
+            bookingMap.set(b.bookingCode, b);
+          } else {
+            if (b.status === "CHECKED_IN" || b.status === "REFUNDED") {
+              bookingMap.set(b.bookingCode, { ...bookingMap.get(b.bookingCode), ...b });
+            }
+          }
+        });
+        bookings.splice(0, bookings.length, ...Array.from(bookingMap.values()));
       }
     } catch (err) {
       console.warn("⚠️ Lỗi đồng bộ dữ liệu từ MySQL:", err.message);
@@ -1180,17 +1294,21 @@ async function syncFromDatabase() {
   }
 }
 
+let syncPromise = null;
+
 // Khởi chạy server với cơ chế tự động chuyển cổng an toàn (Port Auto-failover)
 const startServer = (portToTry) => {
-  const srv = app.listen(portToTry, async () => {
+  const srv = app.listen(portToTry, () => {
     console.log(`====================================================`);
     console.log(` 🎬 CGV Cultureplex Cinema Management — Port ${portToTry}`);
     console.log(`    http://localhost:${portToTry}`);
     console.log(` 🎟️ Thanh Đặt Vé Nhanh & Phân Trang Khách Hàng / Admin`);
     console.log(` 👑 Thẻ Thành Viên CGV Membership & Phân Quyền RBAC`);
     console.log(`====================================================`);
-    await database.testConnection();
-    await syncFromDatabase();
+    syncPromise = (async () => {
+      await database.testConnection();
+      await syncFromDatabase();
+    })();
   });
 
   srv.on("error", (err) => {
@@ -1207,5 +1325,10 @@ const startServer = (portToTry) => {
 
 startServer(PORT);
 
+app.waitForDatabase = async () => {
+  if (syncPromise) {
+    await syncPromise;
+  }
+};
 
 module.exports = app;

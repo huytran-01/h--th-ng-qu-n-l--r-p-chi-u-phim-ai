@@ -16,8 +16,22 @@ const DB_CONFIG = {
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
   database: process.env.DB_NAME || "cinema_db",
-  multipleStatements: true
+  multipleStatements: true,
+  charset: "utf8mb4",
+  timezone: "+07:00",
+  dateStrings: true
 };
+
+function formatMysqlDatetime(str) {
+  if (!str) return null;
+  const clean = String(str).replace("T", " ").trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(clean)) return clean;
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(clean)) return clean + ":00";
+  const d = new Date(str);
+  if (isNaN(d.getTime())) return clean;
+  const pad = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 
 async function initDatabase() {
   console.log("==================================================================");
@@ -124,12 +138,12 @@ async function initDatabase() {
     // 7. Seed dữ liệu: Showtimes
     console.log("⏳ Đang nạp dữ liệu Suất chiếu (Showtimes)...");
     for (const st of mockData.showtimes) {
-      const startTime = new Date(st.startTime).toISOString().slice(0, 19).replace('T', ' ');
-      const endTime = st.endTime ? new Date(st.endTime).toISOString().slice(0, 19).replace('T', ' ') : null;
+      const startTime = formatMysqlDatetime(st.startTime);
+      const endTime = formatMysqlDatetime(st.endTime);
       await dbConn.execute(
         `INSERT INTO showtimes (id, movie_id, room_id, start_time, end_time, price, format)
          VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE start_time=VALUES(start_time), price=VALUES(price);`,
+         ON DUPLICATE KEY UPDATE movie_id=VALUES(movie_id), room_id=VALUES(room_id), start_time=VALUES(start_time), end_time=VALUES(end_time), price=VALUES(price), format=VALUES(format);`,
         [st.id, st.movieId, st.roomId, startTime, endTime, st.price || 110000, st.format || "2D"]
       );
     }
@@ -172,7 +186,12 @@ async function initDatabase() {
 
     // 10. Seed dữ liệu: Bookings
     console.log("⏳ Đang nạp dữ liệu Đơn đặt vé (Bookings)...");
+    const [stRows] = await dbConn.execute("SELECT id FROM showtimes");
+    const validStIds = new Set(stRows.map(r => r.id));
+    const firstValidStId = stRows.length > 0 ? stRows[0].id : null;
+
     for (const b of mockData.bookings) {
+      const showtimeId = validStIds.has(b.showtimeId) ? b.showtimeId : firstValidStId;
       await dbConn.execute(
         `INSERT INTO bookings 
          (booking_code, qr_token, user_id, movie_id, showtime_id, seats, ticket_total, combo_total, total, status)
@@ -183,7 +202,7 @@ async function initDatabase() {
           b.qrToken || b.bookingCode,
           b.userId,
           b.movieId,
-          b.showtimeId,
+          showtimeId,
           JSON.stringify(b.seats || []),
           b.total || 0,
           0,
