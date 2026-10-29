@@ -79,8 +79,19 @@ function requirePermission(permission) {
 /**
  * Middleware ngăn chặn Quản trị viên (ADMIN) sử dụng tài khoản điều hành để đặt vé cá nhân
  * Đảm bảo nguyên tắc phân tách trách nhiệm nghiệp vụ (Separation of Concerns & Role Isolation)
+ * ĐỒNG THỜI đảm bảo không chặn nhầm tài khoản Khách hàng (CUSTOMER / user_guest) khi có lệch pha token
  */
 function preventAdminPersonalBooking(req, res, next) {
+  const reqUserId = req.body && req.body.userId;
+  const demoRole = (req.header("x-demo-role") || "").toUpperCase();
+
+  // 1. Nếu client truyền vai trò thao tác là CUSTOMER hoặc userId là khách hàng (user_guest hoặc không bắt đầu bằng admin_)
+  // Luôn cho phép đặt vé bình thường
+  if (demoRole === "CUSTOMER" || reqUserId === "user_guest" || (reqUserId && !reqUserId.startsWith("admin_"))) {
+    return next();
+  }
+
+  // 2. Xác thực token thực tế
   let role = "CUSTOMER";
   let currentUser = null;
 
@@ -92,17 +103,15 @@ function preventAdminPersonalBooking(req, res, next) {
     }
   }
 
-  if (!currentUser && req.header("x-demo-role")) {
-    const demoRole = req.header("x-demo-role").toUpperCase();
-    if (ROLE_PERMISSIONS[demoRole]) {
-      role = demoRole;
-    }
+  if (demoRole && ROLE_PERMISSIONS[demoRole]) {
+    role = demoRole;
   }
 
-  if (role === "ADMIN") {
+  // 3. Chỉ chặn khi thực sự là tài khoản ADMIN và đang thực hiện đặt vé dưới danh nghĩa tài khoản Admin
+  if (role === "ADMIN" && (!reqUserId || reqUserId.startsWith("admin_"))) {
     return res.status(403).json({
       status: "FORBIDDEN",
-      message: "Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân"
+      message: "Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân. Vui lòng chuyển sang tài khoản Khách hàng để đặt vé."
     });
   }
 
@@ -399,12 +408,31 @@ app.get("/api/v1/users/:id/bookings", (req, res) => {
 });
 
 // Lịch sử tất cả vé đã đặt dành cho Admin, Quản lý và Nhân viên POS
-app.get("/api/v1/admin/bookings", requirePermission("bookings.read"), (req, res) => {
+app.get("/api/v1/admin/bookings", requirePermission("bookings.read"), async (req, res) => {
   const { page = 1, limit = 10, search = "", status = "ALL", date = "" } = req.query;
   const normalizedSearch = String(search).trim().toLowerCase();
   const dateKey = String(date).trim();
 
-  const detailedBookings = bookings.map(booking => {
+  // Đọc danh sách đặt vé mới nhất từ CSDL thực tế
+  let sourceBookings = bookings;
+  try {
+    const dbBookings = await dbService.getBookings();
+    if (dbBookings && dbBookings.length > 0) {
+      sourceBookings = dbBookings;
+      bookings.splice(0, bookings.length, ...dbBookings);
+    }
+  } catch (err) {
+    console.warn("Lỗi đọc bookings từ dbService:", err.message);
+  }
+
+  // Thống kê toàn bộ ca trực thực tế từ toàn bộ CSDL (không bị cắt bởi phân trang)
+  const validAll = sourceBookings.filter(b => b.status === "PAID" || b.status === "CHECKED_IN");
+  const allCheckedInCount = sourceBookings.filter(b => b.status === "CHECKED_IN").length;
+  const allPendingCount = sourceBookings.filter(b => b.status === "PAID").length;
+  const allRevenue = validAll.reduce((sum, b) => sum + Number(b.total || 0), 0);
+  const allTickets = validAll.reduce((sum, b) => sum + (Array.isArray(b.seats) ? b.seats.length : 1), 0);
+
+  const detailedBookings = sourceBookings.map(booking => {
     const user = users.find(item => item.id === booking.userId);
     const movie = movies.find(item => item.id === booking.movieId);
     const showtime = showtimes.find(item => item.id === booking.showtimeId);
@@ -442,24 +470,34 @@ app.get("/api/v1/admin/bookings", requirePermission("bookings.read"), (req, res)
     data: paginated,
     pagination: { total, page: p, limit: l, totalPages },
     summary: {
-      totalTickets: detailedBookings.reduce((sum, booking) => sum + (booking.seats?.length || 0), 0),
-      totalRevenue: detailedBookings.reduce((sum, booking) => sum + Number(booking.total || 0), 0)
+      totalTickets: allTickets,
+      totalRevenue: allRevenue,
+      totalBookings: validAll.length,
+      checkedInCount: allCheckedInCount,
+      pendingCount: allPendingCount
     }
   });
 });
 
 // Xác nhận soát vé / Check-in QR khi khách vào rạp (Dành cho Nhân viên rạp & Admin)
-app.post("/api/v1/bookings/check-in", requirePermission("bookings.scan"), (req, res) => {
+app.post("/api/v1/bookings/check-in", requirePermission("bookings.scan"), async (req, res) => {
   const { code } = req.body;
   if (!code) {
     return res.status(400).json({ status: "ERROR", message: "Vui lòng cung cấp mã đặt vé hoặc mã QR để soát vé." });
   }
 
   const cleanCode = String(code).trim().toUpperCase();
-  const booking = bookings.find(b =>
+  let booking = bookings.find(b =>
     (b.bookingCode && b.bookingCode.toUpperCase() === cleanCode) ||
     (b.qrToken && b.qrToken.toUpperCase() === cleanCode)
   );
+
+  if (!booking) {
+    booking = await dbService.findBookingByCode(cleanCode);
+    if (booking && !bookings.some(b => b.bookingCode === booking.bookingCode)) {
+      bookings.unshift(booking);
+    }
+  }
 
   if (!booking) {
     return res.status(404).json({ status: "ERROR", message: `Không tìm thấy thông tin vé với mã "${code}".` });
@@ -518,17 +556,24 @@ app.post("/api/v1/bookings/check-in", requirePermission("bookings.scan"), (req, 
 });
 
 // Hoàn tác / Reset trạng thái soát vé về PAID (Hỗ trợ Demo thử nghiệm nhiều lần)
-app.post("/api/v1/bookings/reset-check-in", requirePermission("bookings.scan"), (req, res) => {
+app.post("/api/v1/bookings/reset-check-in", requirePermission("bookings.scan"), async (req, res) => {
   const { code } = req.body;
   if (!code) {
     return res.status(400).json({ status: "ERROR", message: "Vui lòng cung cấp mã vé cần hoàn tác." });
   }
 
   const cleanCode = String(code).trim().toUpperCase();
-  const booking = bookings.find(b =>
+  let booking = bookings.find(b =>
     (b.bookingCode && b.bookingCode.toUpperCase() === cleanCode) ||
     (b.qrToken && b.qrToken.toUpperCase() === cleanCode)
   );
+
+  if (!booking) {
+    booking = await dbService.findBookingByCode(cleanCode);
+    if (booking && !bookings.some(b => b.bookingCode === booking.bookingCode)) {
+      bookings.unshift(booking);
+    }
+  }
 
   if (!booking) {
     return res.status(404).json({ status: "ERROR", message: `Không tìm thấy vé với mã "${code}".` });
@@ -703,13 +748,111 @@ app.post("/api/v1/ai/chat", async (req, res) => {
     const { message, sessionId } = req.body;
     if (!message) return res.status(400).json({ status: "ERROR", message: "Nội dung tin nhắn không được trống" });
     const botResponse = await aiService.processChatbotMessage(message, sessionId);
+
+    // Xử lý lưu đơn vé thực tế vào Database/Memory khi AI tạo mã đặt vé (CGV-XXXXXX hoặc BKG-XXXXXX)
+    const codeMatch = (botResponse.replyText || "").match(/(CGV-\d{6}|BKG-\d{6})/i);
+    let bookingData = null;
+
+    if (codeMatch) {
+      const code = codeMatch[1].toUpperCase();
+
+      // Kiểm tra xem đơn vé đã tồn tại chưa
+      let booking = bookings.find(b => b.bookingCode === code);
+      if (!booking) {
+        booking = await dbService.findBookingByCode(code);
+      }
+
+      // Xác định phim tương ứng
+      const targetMovie = botResponse.extractedEntities?.movie ||
+        movies.find(m => botResponse.replyText.toLowerCase().includes(m.title.toLowerCase()) || message.toLowerCase().includes(m.title.toLowerCase())) ||
+        movies[0];
+
+      // Tìm suất chiếu phù hợp
+      const todayIso = new Date().toISOString().slice(0, 10);
+      let targetShowtime = showtimes.find(st => st.movieId === targetMovie.id && st.startTime && st.startTime.slice(0, 10) >= todayIso);
+      if (!targetShowtime) {
+        targetShowtime = showtimes.find(st => st.movieId === targetMovie.id) || showtimes[0];
+      }
+
+      const targetRoom = targetShowtime ? rooms.find(r => r.id === targetShowtime.roomId) : rooms[0];
+      const targetCinema = targetRoom ? cinemas.find(c => c.id === targetRoom.cinemaId) : cinemas[0];
+
+      // Bóc tách danh sách ghế
+      let seatIds = ["G12", "G13"];
+      const seatMatch = (botResponse.replyText || "").match(/(?:ghế|seats?)[^:\n]*:\s*([A-Za-z0-9,\s\-]+)/i);
+      if (seatMatch) {
+        const extracted = seatMatch[1].match(/[A-Za-z]\d{1,2}/g);
+        if (extracted && extracted.length > 0) {
+          seatIds = extracted.map(s => s.toUpperCase());
+        }
+      }
+
+      // Bóc tách tổng tiền
+      let total = 276000;
+      const totalMatch = (botResponse.replyText || "").match(/(?:tổng cộng|tổng tiền|giá vé)[^:\n]*:\s*([\d\.,]+)/i);
+      if (totalMatch) {
+        const numStr = totalMatch[1].replace(/[\.,]/g, "");
+        const parsed = parseInt(numStr, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          total = parsed;
+        }
+      } else {
+        total = seatIds.length * (targetShowtime?.price || 110000);
+      }
+
+      if (!booking) {
+        const newBooking = {
+          bookingCode: code,
+          qrToken: `CGV-TICKET-${code}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+          userId: req.user ? req.user.id : "user_guest",
+          movieId: targetMovie ? targetMovie.id : "mov-01",
+          showtimeId: targetShowtime ? targetShowtime.id : "st-01",
+          seats: seatIds,
+          comboIds: [],
+          ticketTotal: total,
+          comboTotal: 0,
+          total: total,
+          status: "PAID",
+          bookedAt: new Date().toISOString()
+        };
+
+        bookings.unshift(newBooking);
+        try {
+          await dbService.createBooking(newBooking);
+        } catch (dbErr) {
+          console.warn("[Server] Lỗi lưu đơn vé AI vào MySQL:", dbErr.message);
+        }
+        if (targetShowtime) {
+          seatLockService.markSeatsBooked(targetShowtime.id, seatIds);
+        }
+        booking = newBooking;
+      }
+
+      bookingData = {
+        bookingCode: code,
+        qrToken: booking.qrToken || `CGV-TICKET-${code}`,
+        movieId: targetMovie ? targetMovie.id : "mov-01",
+        movieTitle: targetMovie ? targetMovie.title : "Phim chiếu rạp",
+        moviePoster: targetMovie ? (targetMovie.posterUrl || targetMovie.bannerUrl || "") : "",
+        showtimeId: targetShowtime ? targetShowtime.id : "st-01",
+        showtimeStart: targetShowtime ? targetShowtime.startTime : new Date().toISOString(),
+        roomName: targetRoom ? targetRoom.name : "Cinema 01 (IMAX)",
+        cinemaName: targetCinema ? targetCinema.name : "CGV VINCOM LANDMARK 81",
+        seats: booking.seats || seatIds,
+        total: booking.total || total,
+        status: booking.status || "PAID"
+      };
+    }
+
     const suggestedAction = botResponse.suggestedAction || (botResponse.action === "SHOW_BOOKING_CARD" && botResponse.extractedEntities?.movie
       ? { type: "BOOKING_MODAL", movieId: botResponse.extractedEntities.movie.id }
       : null);
+
     res.json({
       status: "SUCCESS",
       ...botResponse,
       reply: botResponse.replyText,
+      bookingData,
       suggestedAction
     });
   } catch (err) {
@@ -1220,10 +1363,15 @@ app.delete("/api/v1/admin/users/:id", requirePermission("users.manage"), (req, r
 });
 
 // 4. Admin Analytics & Báo cáo
-app.get("/api/v1/admin/daily-report", requirePermission("analytics.read"), (req, res) => {
-  const date = req.query.date ? new Date(req.query.date) : new Date();
-  const report = aiService.getDailyReport(date);
-  res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_v1", data: report });
+app.get("/api/v1/admin/daily-report", requirePermission("analytics.read"), async (req, res) => {
+  try {
+    const report = await dbService.getRealAnalyticsReport();
+    res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_RealData", data: report });
+  } catch (err) {
+    const date = req.query.date ? new Date(req.query.date) : new Date();
+    const fallbackReport = aiService.getDailyReport(date);
+    res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_v1", data: fallbackReport });
+  }
 });
 
 app.get("/api/v1/admin/optimal-schedule", requirePermission("ai.manage"), (req, res) => {
@@ -1231,10 +1379,20 @@ app.get("/api/v1/admin/optimal-schedule", requirePermission("ai.manage"), (req, 
   res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_v1", data: schedule });
 });
 
-app.get("/api/v1/admin/revenue-analysis", requirePermission("analytics.read"), (req, res) => {
+app.get("/api/v1/admin/revenue-analysis", requirePermission("analytics.read"), async (req, res) => {
   const movieId = req.query.movieId || null;
-  const analysis = aiService.getRevenueAnalysis(movieId);
-  res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_v1", data: analysis });
+  try {
+    const report = await dbService.getRealAnalyticsReport();
+    if (movieId) {
+      const m = report.topMovies.find(x => x.movieId === movieId) || { movieId, title: "Phim", tickets: 0, revenue: 0 };
+      res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_RealData", data: m });
+    } else {
+      res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_RealData", data: report.topMovies });
+    }
+  } catch (err) {
+    const analysis = aiService.getRevenueAnalysis(movieId);
+    res.json({ status: "SUCCESS", agent: "AdminAnalyticsAgent_v1", data: analysis });
+  }
 });
 
 app.get("/api/v1/admin/ai-health", requirePermission("ai.manage"), (req, res) => {

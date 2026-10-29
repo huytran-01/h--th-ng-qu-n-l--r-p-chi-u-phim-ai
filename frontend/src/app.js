@@ -5,6 +5,7 @@ const API_BASE = (typeof window !== "undefined" && window.location && window.loc
 let allMovies = [];
 let allCinemas = [];
 let selectedMovie = null;
+let lastCreatedMovieId = null;
 let selectedShowtime = null;
 let selectedSeats = [];
 let selectedCombos = {};
@@ -89,6 +90,11 @@ function formatShowtimeFull(dateTimeStr) {
   return `${hours}:${minutes} - ${day}/${month}/${year}`;
 }
 
+// ==================== CURRENCY FORMATTING UTILITIES ==================== //
+function formatCurrency(amount) {
+  return Number(amount || 0).toLocaleString("vi-VN");
+}
+
 /**
  * Chuyển đổi chuỗi ngày giờ (UTC ISO hoặc Mock) thành định dạng chuẩn giờ Việt Nam (GMT+7)
  * Dùng cho input type="datetime-local" (YYYY-MM-DDTHH:mm)
@@ -113,8 +119,22 @@ function toLocalDatetimeInputString(dateStr) {
 
 // ==================== INITIALIZATION ==================== //
 document.addEventListener("DOMContentLoaded", async () => {
-  // Khởi tạo trạng thái đăng nhập
-  if (authToken && !currentUser) {
+  // Khởi tạo trạng thái đăng nhập & kiểm tra đồng bộ token
+  if (authToken && currentUser) {
+    const isMismatched = authToken.startsWith("cgv_") && !authToken.startsWith(`cgv_${currentUser.id}_`);
+    if (isMismatched) {
+      console.warn("Phát hiện lệch pha giữa authToken và currentUser. Đang tự động đồng bộ lại...");
+      if (currentUser.role === "CUSTOMER") {
+        await quickLogin("customer@aicinema.vn", "123456", false);
+      } else if (currentUser.role === "STAFF") {
+        await quickLogin("minhanh@aicinema.vn", "123456", false);
+      } else if (currentUser.role === "ADMIN") {
+        await quickLogin("admin@aicinema.vn", "admin123", false);
+      }
+    } else {
+      updateAuthUI();
+    }
+  } else if (authToken && !currentUser) {
     await fetchCurrentUser();
   } else if (!authToken && !currentUser) {
     // Mặc định đăng nhập tài khoản khách hàng VIP để trải nghiệm ngay
@@ -138,6 +158,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Tải dữ liệu ban đầu
   await Promise.all([
+    fetchAllMovies(),
     fetchCustomerMovies(),
     fetchCinemas(),
     fetchAIRecommendations(),
@@ -153,7 +174,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 function getAuthHeaders() {
   const headers = { "Content-Type": "application/json" };
   if (authToken) {
-    headers["Authorization"] = `Bearer ${authToken}`;
+    // Nếu tài khoản hiện tại là Khách hàng nhưng token là của Admin/Staff, không gửi token lệch pha
+    const isMismatched = currentUser && authToken.startsWith("cgv_") && !authToken.startsWith(`cgv_${currentUser.id}_`);
+    if (!isMismatched) {
+      headers["Authorization"] = `Bearer ${authToken}`;
+    }
   }
   if (currentUser && currentUser.role) {
     headers["x-demo-role"] = String(currentUser.role).toUpperCase();
@@ -684,6 +709,56 @@ function populateQuickBookingDates() {
   }
 }
 
+/**
+ * Tải toàn bộ danh mục phim đầy đủ (Không phân trang) từ máy chủ
+ * Đảm bảo các dropdown chọn phim (Tạo suất chiếu, Đặt vé nhanh) luôn có đầy đủ 100% phim
+ */
+async function fetchAllMovies() {
+  try {
+    const res = await fetch(`${API_BASE}/movies`);
+    const json = await res.json();
+    if (json.status === "SUCCESS" && Array.isArray(json.data)) {
+      allMovies = json.data;
+      updateMovieDropdowns();
+      return allMovies;
+    }
+  } catch (err) {
+    console.warn("Lỗi fetchAllMovies:", err.message);
+  }
+  return allMovies;
+}
+
+/**
+ * Cập nhật tức thì danh sách phim vào tất cả các dropdown trên toàn hệ thống
+ */
+function updateMovieDropdowns() {
+  // 1. Dropdown Chọn Phim trong modal Tạo / Sửa Suất Chiếu
+  const stMovieSelect = document.getElementById("showtime-movie-id");
+  if (stMovieSelect) {
+    const currentVal = stMovieSelect.value;
+    stMovieSelect.innerHTML = allMovies.map(m => {
+      const duration = m.durationMinutes || m.duration || 120;
+      const tag = m.status === "COMING_SOON" ? " [Sắp chiếu]" : "";
+      return `<option value="${m.id}">${m.title} (${duration}p)${tag}</option>`;
+    }).join("");
+    if (currentVal && allMovies.some(m => m.id === currentVal)) {
+      stMovieSelect.value = currentVal;
+    }
+  }
+
+  // 2. Dropdown Phim trong thanh Đặt Vé Nhanh (Trang chủ)
+  const qbMovie = document.getElementById("qb-movie");
+  if (qbMovie) {
+    const currentQb = qbMovie.value;
+    const nowShowing = allMovies.filter(m => m.status === "NOW_SHOWING");
+    qbMovie.innerHTML = `<option value="">-- Chọn Phim Đang Chiếu --</option>` +
+      nowShowing.map(m => `<option value="${m.id}">${m.title}</option>`).join("");
+    if (currentQb && allMovies.some(m => m.id === currentQb)) {
+      qbMovie.value = currentQb;
+    }
+  }
+}
+
 function initQuickBookingBar() {
   const movieSelect = document.getElementById("qb-movie");
   const cinemaSelect = document.getElementById("qb-cinema");
@@ -773,8 +848,7 @@ async function updateQuickBookingShowtimes() {
 
 function executeQuickBooking() {
   if (currentUser && currentUser.role === "ADMIN") {
-    showToast("Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân", "error");
-    return;
+    quickLogin("customer@aicinema.vn", "123456", false);
   }
 
   const movieId = document.getElementById("qb-movie").value;
@@ -810,7 +884,9 @@ async function fetchCustomerMovies() {
     const json = await res.json();
 
     if (json.status === "SUCCESS") {
-      allMovies = json.data; // Lưu cache
+      if (!allMovies || allMovies.length === 0) {
+        allMovies = json.data;
+      }
       renderCustomerMoviesGrid(json.data, json.pagination);
     }
   } catch (err) {
@@ -1790,6 +1866,9 @@ function renderAdminMoviesTable(moviesList, pagination) {
         </button>
       </td>
       <td class="p-4 text-right space-x-2">
+        <button onclick="openShowtimeForMovie('${m.id}')" class="px-2.5 py-1.5 rounded-lg bg-green-950/60 text-green-400 border border-green-800/50 hover:bg-green-900/60 transition" title="Tạo suất chiếu cho phim này">
+          <i class="fa-solid fa-calendar-plus"></i>
+        </button>
         <button onclick='openMovieModal("edit", ${JSON.stringify(m).replace(/'/g, "&apos;")})' class="px-2.5 py-1.5 rounded-lg bg-blue-950/60 text-blue-400 border border-blue-800/50 hover:bg-blue-900/60 transition" title="Sửa phim">
           <i class="fa-solid fa-pen-to-square"></i>
         </button>
@@ -1915,6 +1994,8 @@ async function handleMovieFormSubmit(event) {
     if (json.status === "SUCCESS") {
       closeMovieModal();
       showToast(json.message || "Đã lưu thông tin phim!", "success");
+      lastCreatedMovieId = json.data ? json.data.id : null;
+      await fetchAllMovies(); // Cập nhật ngay toàn bộ danh mục phim vào dropdowns
       fetchAdminMovies();
       fetchCustomerMovies(); // Cập nhật cho trang khách hàng
     } else {
@@ -1949,6 +2030,7 @@ function confirmDeleteMovie(id, title) {
       const json = await res.json();
       if (json.status === "SUCCESS") {
         showToast(json.message || "Đã xóa phim thành công!", "success");
+        await fetchAllMovies(); // Cập nhật ngay toàn bộ danh mục phim vào dropdowns
         fetchAdminMovies();
         fetchCustomerMovies();
       } else {
@@ -2090,16 +2172,22 @@ function autoCalculateEndTime() {
   }
 }
 
-function openShowtimeModal(mode = "create", stData = null) {
+async function openShowtimeModal(mode = "create", stData = null) {
   const modal = document.getElementById("showtime-modal");
   const title = document.getElementById("showtime-modal-title");
   const movieSelect = document.getElementById("showtime-movie-id");
 
-  movieSelect.innerHTML = allMovies.map(m => `<option value="${m.id}">${m.title} (${m.durationMinutes || m.duration || 120}p)</option>`).join("");
+  // Luôn nạp lại toàn bộ danh mục phim mới nhất từ máy chủ để hiển thị ngay phim vừa thêm
+  await fetchAllMovies();
 
   if (mode === "create") {
     title.textContent = "Tạo Suất Chiếu Mới";
     document.getElementById("showtime-form-id").value = "";
+    // Nếu vừa thêm phim mới xong (hoặc chọn từ nút Tạo Suất Chiếu ở bảng Phim), tự động chọn luôn phim đó
+    if (lastCreatedMovieId && allMovies.some(m => m.id === lastCreatedMovieId)) {
+      if (movieSelect) movieSelect.value = lastCreatedMovieId;
+      lastCreatedMovieId = null;
+    }
     // Mặc định tạo suất chiếu cách thời điểm hiện tại 2 giờ (làm tròn 15 phút)
     const defaultStart = new Date(Date.now() + 2 * 3600 * 1000);
     defaultStart.setMinutes(Math.ceil(defaultStart.getMinutes() / 15) * 15, 0, 0);
@@ -2109,7 +2197,7 @@ function openShowtimeModal(mode = "create", stData = null) {
   } else if (stData) {
     title.textContent = `Sửa Suất Chiếu: ${stData.id}`;
     document.getElementById("showtime-form-id").value = stData.id;
-    document.getElementById("showtime-movie-id").value = stData.movieId;
+    if (movieSelect) movieSelect.value = stData.movieId;
     document.getElementById("showtime-room-id").value = stData.roomId;
     document.getElementById("showtime-start").value = toLocalDatetimeInputString(stData.startTime);
     document.getElementById("showtime-end").value = toLocalDatetimeInputString(stData.endTime);
@@ -2120,6 +2208,12 @@ function openShowtimeModal(mode = "create", stData = null) {
   }
 
   modal.classList.remove("hidden");
+}
+
+function openShowtimeForMovie(movieId) {
+  lastCreatedMovieId = movieId;
+  switchAdminTab("showtimes");
+  openShowtimeModal("create");
 }
 
 function closeShowtimeModal() {
@@ -2662,21 +2756,21 @@ function renderStaffBookingsTable(bookingsList, pagination, summary) {
   const ticketsEl = document.getElementById("staff-booking-total-tickets");
   const revenueEl = document.getElementById("staff-booking-total-revenue");
 
-  // Shift KPI counters
+  // Shift KPI counters (Đồng bộ số liệu thực tế toàn ca từ summary backend)
   const statTotal = document.getElementById("staff-stat-total");
   const statCheckedIn = document.getElementById("staff-stat-checkedin");
   const statPending = document.getElementById("staff-stat-pending");
   const statRevenue = document.getElementById("staff-stat-revenue");
 
-  if (statTotal) statTotal.textContent = Number(pagination?.total || (bookingsList ? bookingsList.length : 0)).toLocaleString("vi-VN");
-  if (statRevenue) statRevenue.textContent = `${Number(summary?.totalRevenue || 0).toLocaleString("vi-VN")} đ`;
+  const totalInShift = summary?.totalBookings ?? pagination?.total ?? (bookingsList ? bookingsList.length : 0);
+  const totalRevInShift = summary?.totalRevenue ?? 0;
+  const checkedInInShift = summary?.checkedInCount ?? (bookingsList ? bookingsList.filter(b => b.status === "CHECKED_IN").length : 0);
+  const pendingInShift = summary?.pendingCount ?? (bookingsList ? bookingsList.filter(b => b.status === "PAID").length : 0);
 
-  if (bookingsList && Array.isArray(bookingsList)) {
-    const checkedInCount = bookingsList.filter(b => b.status === "CHECKED_IN").length;
-    const pendingCount = bookingsList.filter(b => b.status === "PAID").length;
-    if (statCheckedIn) statCheckedIn.textContent = checkedInCount;
-    if (statPending) statPending.textContent = pendingCount;
-  }
+  if (statTotal) statTotal.textContent = Number(totalInShift).toLocaleString("vi-VN");
+  if (statRevenue) statRevenue.textContent = `${Number(totalRevInShift).toLocaleString("vi-VN")} đ`;
+  if (statCheckedIn) statCheckedIn.textContent = Number(checkedInInShift).toLocaleString("vi-VN");
+  if (statPending) statPending.textContent = Number(pendingInShift).toLocaleString("vi-VN");
 
   if (!tbody) return;
   tbody.innerHTML = "";
@@ -3250,8 +3344,7 @@ let modalSelectedCinema = "ALL";
 
 async function openBookingModal(movieId) {
   if (currentUser && currentUser.role === "ADMIN") {
-    showToast("Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân", "error");
-    return;
+    await quickLogin("customer@aicinema.vn", "123456", false);
   }
 
   selectedMovie = allMovies.find(m => m.id === movieId);
@@ -3572,7 +3665,7 @@ async function lockSelectedSeats() {
   try {
     const res = await fetch(`${API_BASE}/bookings/lock-seats`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({
         showtimeId: selectedShowtime,
         seatIds: selectedSeats,
@@ -3692,8 +3785,8 @@ function updateOrderSummary() {
 
 async function handleCheckout() {
   if (currentUser && currentUser.role === "ADMIN") {
-    showToast("Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân", "error");
-    return;
+    showToast("Đang chuyển sang tài khoản Khách hàng để hoàn tất thanh toán...", "info");
+    await quickLogin("customer@aicinema.vn", "123456", false);
   }
 
   if (!selectedSeats.length || !selectedShowtime) return;
@@ -3708,6 +3801,7 @@ async function handleCheckout() {
     Array.from({ length: combo.qty }, () => comboId)
   );
 
+  let json;
   try {
     const res = await fetch(`${API_BASE}/payments/checkout`, {
       method: "POST",
@@ -3720,11 +3814,23 @@ async function handleCheckout() {
         customerInfo: customerInfo
       })
     });
-    const json = await res.json();
+    json = await res.json();
+  } catch (netErr) {
+    console.error("Network error on checkout:", netErr);
+    showToast("Lỗi kết nối máy chủ thanh toán.", "error");
+    checkoutBtn.disabled = false;
+    checkoutBtn.innerHTML = '<i class="fa-solid fa-credit-card mr-2"></i>Thanh Toán & Xuất Vé';
+    return;
+  }
 
+  try {
     if (json.status === "SUCCESS") {
       closeBookingModal();
-      showTicketModal(json.data);
+      try {
+        showTicketModal(json.data);
+      } catch (uiModalErr) {
+        console.error("Error opening ticket modal:", uiModalErr);
+      }
       triggerConfetti();
       showToast(json.message || "Đặt vé thành công! Điểm thưởng CGV đã được tích lũy.", "success");
       if (authToken) fetchCurrentUser();
@@ -3732,7 +3838,7 @@ async function handleCheckout() {
       showToast(json.message || "Giao dịch không thành công!", "error");
     }
   } catch (err) {
-    showToast("Lỗi kết nối máy chủ thanh toán.", "error");
+    console.error("Error handling checkout result:", err);
   } finally {
     checkoutBtn.disabled = false;
     checkoutBtn.innerHTML = '<i class="fa-solid fa-credit-card mr-2"></i>Thanh Toán & Xuất Vé';
@@ -3754,46 +3860,121 @@ function openCustomerTicketQr(bookingCode) {
     roomName: b.room?.name || "Phòng 01 - IMAX",
     showtimeStart: b.showtime?.startTime || "Hôm nay",
     seats: b.seats || [],
-    qrToken: b.qrToken || b.bookingCode
+    qrToken: b.qrToken || b.bookingCode,
+    total: b.total || 0
   });
 }
 
-function goCheckInThisTicket() {
+async function goToStaffCheckIn(code) {
+  if (!code) return;
+  const isStaffOrAdmin = currentUser && ["STAFF", "ADMIN", "MANAGER"].includes(currentUser.role);
+  if (!isStaffOrAdmin) {
+    showToast("Tính năng duyệt vé chỉ dành riêng cho Nhân viên quầy và Quản trị viên.", "warning");
+    return;
+  }
+  switchView('staff');
+  switchStaffTab('scan');
+  setTimeout(() => {
+    processStaffTicketCode(code);
+  }, 350);
+}
+
+function openChatBookingTicket(bData) {
+  if (!bData) return;
+  showTicketModal({
+    cinemaName: bData.cinemaName || "CGV VINCOM LANDMARK 81",
+    movieTitle: bData.movieTitle || "Phim chiếu rạp",
+    bookingCode: bData.bookingCode || "CGV-UNKNOWN",
+    roomName: bData.roomName || "Cinema 01 (IMAX)",
+    showtimeStart: bData.showtimeStart || new Date().toISOString(),
+    seats: Array.isArray(bData.seats) ? bData.seats : (bData.seats ? [bData.seats] : ["G12", "G13"]),
+    qrToken: bData.qrToken || bData.bookingCode
+  });
+}
+
+async function goCheckInThisTicket() {
   if (!currentModalTicket) return;
+  const isStaffOrAdmin = currentUser && ["STAFF", "ADMIN", "MANAGER"].includes(currentUser.role);
+  if (!isStaffOrAdmin) {
+    showToast("Bạn không có quyền duyệt vé vào rạp. Vui lòng xuất trình mã QR cho Nhân viên.", "warning");
+    return;
+  }
   const code = currentModalTicket.bookingCode || currentModalTicket.qrToken;
   closeTicketModal();
-  switchView('staff');
   if (code) {
-    processStaffTicketCode(code);
+    await goToStaffCheckIn(code);
   }
 }
 
 function showTicketModal(ticketData) {
+  if (!ticketData) return;
   currentModalTicket = ticketData;
-  document.getElementById("ticket-cinema").innerText = ticketData.cinemaName || "CGV VINCOM LANDMARK 81";
-  document.getElementById("ticket-movie-title").innerText = ticketData.movieTitle;
-  document.getElementById("ticket-code").innerText = ticketData.bookingCode;
-  document.getElementById("ticket-room").innerText = ticketData.roomName || "Phòng 01 - IMAX";
-  document.getElementById("ticket-time").innerText = formatShowtimeFull(ticketData.showtimeStart);
-  document.getElementById("ticket-seats").innerText = ticketData.seats.join(", ");
+  document.body.classList.add("ticket-modal-open");
+
+  const cinemaEl = document.getElementById("ticket-cinema");
+  if (cinemaEl) cinemaEl.innerText = ticketData.cinemaName || "CGV VINCOM LANDMARK 81";
+
+  const movieEl = document.getElementById("ticket-movie-title");
+  if (movieEl) movieEl.innerText = ticketData.movieTitle || "Phim chiếu rạp CGV";
+
+  const codeEl = document.getElementById("ticket-code");
+  if (codeEl) codeEl.innerText = ticketData.bookingCode || "CGV-TICKET";
+
+  const roomEl = document.getElementById("ticket-room");
+  if (roomEl) roomEl.innerText = ticketData.roomName || "Phòng 01 - IMAX";
+
+  const timeEl = document.getElementById("ticket-time");
+  if (timeEl) timeEl.innerText = formatShowtimeFull(ticketData.showtimeStart);
+
+  const seatsEl = document.getElementById("ticket-seats");
+  if (seatsEl) {
+    seatsEl.innerText = Array.isArray(ticketData.seats) ? ticketData.seats.join(", ") : (ticketData.seats || "");
+  }
+
+  const totalEl = document.getElementById("ticket-total");
+  if (totalEl) {
+    const rawTotal = ticketData.total || ticketData.ticketTotal || 0;
+    totalEl.innerText = formatCurrency(rawTotal) + " VNĐ";
+  }
+
+  // Phân quyền RBAC: Nút "Duyệt Vé Vào Rạp" chỉ hiển thị cho Nhân viên (STAFF) và Quản lý (ADMIN/MANAGER)
+  const checkinBtn = document.getElementById("ticket-modal-checkin-btn");
+  if (checkinBtn) {
+    const isStaffOrAdmin = currentUser && ["STAFF", "ADMIN", "MANAGER"].includes(currentUser.role);
+    if (isStaffOrAdmin) {
+      checkinBtn.classList.remove("hidden");
+    } else {
+      checkinBtn.classList.add("hidden");
+    }
+  }
 
   const qrContainer = document.getElementById("ticket-qrcode");
-  qrContainer.innerHTML = "";
-  new QRCode(qrContainer, {
-    text: ticketData.qrToken || ticketData.bookingCode,
-    width: 130,
-    height: 130,
-    colorDark: "#0F1015",
-    colorLight: "#FFFFFF",
-    correctLevel: QRCode.CorrectLevel.H
-  });
+  if (qrContainer) {
+    qrContainer.innerHTML = "";
+    if (typeof QRCode !== "undefined") {
+      new QRCode(qrContainer, {
+        text: ticketData.qrToken || ticketData.bookingCode || "CGV-TICKET",
+        width: 130,
+        height: 130,
+        colorDark: "#0F1015",
+        colorLight: "#FFFFFF",
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    }
+  }
 
-  document.getElementById("ticket-modal").classList.remove("hidden");
+  const modalEl = document.getElementById("ticket-modal");
+  if (modalEl) modalEl.classList.remove("hidden");
 }
 
 function closeTicketModal() {
+  document.body.classList.remove("ticket-modal-open");
   document.getElementById("ticket-modal").classList.add("hidden");
   switchView("home");
+}
+
+function printTicketReceipt() {
+  window.print();
 }
 
 function triggerConfetti() {
@@ -3824,7 +4005,7 @@ async function checkGeminiStatus() {
     const indicator = document.getElementById("chatbot-status-indicator");
     if (indicator && json.gemini) {
       if (json.gemini.available) {
-        indicator.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles text-[9px] mr-1 text-cyan-400"></i>Trực tuyến • Trợ lý AI CGV`;
+        indicator.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles text-[9px] mr-1 text-cyan-400"></i>Trực tuyến • Gemini 3.5 Flash Lite`;
         indicator.className = "block text-[10px] text-cyan-400 font-semibold";
       } else {
         indicator.innerHTML = `<i class="fa-solid fa-circle text-[8px] mr-1 text-green-400"></i>Trực tuyến • Hỗ trợ 24/7`;
@@ -3939,6 +4120,132 @@ function appendChatMessage(text, sender, suggestedAction = null, responseData = 
       </div>
     `;
   } else {
+    let bookingCardHTML = "";
+    // Chỉ hiển thị thẻ vé E-Ticket khi backend THỰC SỰ trả về bookingData (tra cứu vé hợp lệ)
+    let bData = responseData?.bookingData;
+
+    if (bData) {
+      const seatsFormatted = Array.isArray(bData.seats) ? bData.seats.join(", ") : (bData.seats || "G12, G13");
+      const safeDataJson = JSON.stringify(bData).replace(/'/g, "&apos;");
+
+      bookingCardHTML = `
+        <div class="mt-3 p-3.5 rounded-2xl bg-gradient-to-br from-gray-900 via-black to-red-950/70 border-2 border-red-500/80 shadow-2xl text-xs space-y-3">
+          <!-- Card Header -->
+          <div class="flex items-center justify-between pb-2 border-b border-gray-800">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse"></span>
+              <span class="px-2 py-0.5 rounded-full bg-green-950 text-green-300 border border-green-700 font-black text-[9px] tracking-wide uppercase">
+                ✓ Vé Đã Xác Nhận • Sẵn Sàng Vào Rạp
+              </span>
+            </div>
+            <span class="text-[9px] text-gray-400 font-mono font-bold tracking-wider">CGV E-TICKET</span>
+          </div>
+
+          <!-- Movie & Showtime Info -->
+          <div class="flex items-start gap-3">
+            ${bData.moviePoster ? `<img src="${escapeChatHTML(bData.moviePoster)}" class="w-12 h-16 rounded-xl object-cover border border-gray-700 shadow flex-shrink-0" alt="Poster">` : ''}
+            <div class="flex-1 min-w-0">
+              <h4 class="text-xs sm:text-sm font-black text-white leading-tight line-clamp-2">${escapeChatHTML(bData.movieTitle)}</h4>
+              <div class="mt-1 space-y-0.5 text-[10px] text-gray-300">
+                <div><i class="fa-solid fa-clock mr-1 text-cyan-400"></i><b class="text-white">${escapeChatHTML(formatShowtimeFull(bData.showtimeStart))}</b></div>
+                <div><i class="fa-solid fa-door-open mr-1 text-purple-400"></i>${escapeChatHTML(bData.roomName || 'Cinema 01')} • <span class="text-gray-400">${escapeChatHTML(bData.cinemaName || 'CGV Cinema')}</span></div>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="text-gray-400">Ghế:</span>
+                  <b class="text-cgv-gold text-xs font-black tracking-wider bg-black/50 px-2 py-0.5 rounded border border-yellow-800/60">${escapeChatHTML(seatsFormatted)}</b>
+                  <span class="text-gray-400 ml-auto">Tổng:</span>
+                  <b class="text-green-400 text-xs font-black">${Number(bData.total || 0).toLocaleString('vi-VN')} đ</b>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Booking Code Box -->
+          <div class="p-2.5 rounded-xl bg-black/70 border border-yellow-500/50 flex items-center justify-between">
+            <div>
+              <span class="text-[9px] text-gray-400 block uppercase font-bold tracking-wider">Mã đặt vé điện tử</span>
+              <span class="text-sm sm:text-base font-black text-cgv-gold font-mono tracking-widest">${escapeChatHTML(bData.bookingCode)}</span>
+            </div>
+            <span class="px-2 py-1 rounded-lg bg-green-950/90 text-green-400 border border-green-700 text-[10px] font-bold">
+              <i class="fa-solid fa-circle-check mr-1"></i>HỢP LỆ
+            </span>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="grid ${currentUser && ['STAFF', 'ADMIN', 'MANAGER'].includes(currentUser.role) ? 'grid-cols-2' : 'grid-cols-1'} gap-2 pt-1">
+            ${currentUser && ['STAFF', 'ADMIN', 'MANAGER'].includes(currentUser.role) ? `
+              <!-- Nút 1: Duyệt Vé Ngay (Dành riêng cho Nhân viên & Quản lý) -->
+              <button type="button" onclick="goToStaffCheckIn('${escapeChatHTML(bData.bookingCode)}')" class="py-2 px-2.5 rounded-xl bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-500 hover:to-emerald-600 text-white font-black text-[10px] transition flex items-center justify-center gap-1.5 shadow-lg shadow-green-950/50">
+                <i class="fa-solid fa-qrcode text-xs"></i>
+                <span>Duyệt Vé Ngay</span>
+              </button>
+            ` : ''}
+
+            <!-- Nút 2: Xem Vé & QR Code (Khách hàng & Mọi người) -->
+            <button type="button" onclick='openChatBookingTicket(${safeDataJson})' class="py-2 px-2.5 rounded-xl bg-gradient-to-r from-cgv-red to-red-700 hover:from-red-600 hover:to-red-800 text-white font-black text-[10px] transition flex items-center justify-center gap-1.5 shadow-lg shadow-red-950/50">
+              <i class="fa-solid fa-ticket text-xs"></i>
+              <span>Xem Vé & QR Code</span>
+            </button>
+          </div>
+
+          ${bData.movieId ? `
+            <button type="button" onclick="openBookingModal('${escapeChatHTML(bData.movieId)}')" class="w-full py-1 text-center text-[9px] text-gray-400 hover:text-white transition">
+              <i class="fa-solid fa-couch mr-1 text-cgv-gold"></i>Bạn muốn đổi ghế hoặc chọn suất chiếu khác? Bấm vào đây
+            </button>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    // Thẻ Chọn Suất Chiếu & Ghế Ngồi (Interactive Movie Showtime & Seat Selection Card)
+    let chooseSeatsCardHTML = "";
+    const targetMovie = responseData?.targetMovie || (responseData?.extractedEntities?.movie) || null;
+    const isChoosingSeat = responseData?.action === "SHOW_CHOOSE_SEATS_CARD" || responseData?.intent === "CHOOSE_SHOWTIME_SEAT" || responseData?.suggestedAction?.type === "BOOKING_MODAL";
+    if (targetMovie && isChoosingSeat) {
+      const showtimes = responseData?.suggestedShowtimes || [];
+      chooseSeatsCardHTML = `
+        <div class="mt-3 p-3.5 rounded-2xl bg-gradient-to-br from-gray-900 via-black to-red-950/50 border-2 border-red-500/70 shadow-2xl text-xs space-y-3">
+          <div class="flex items-center justify-between pb-2 border-b border-gray-800">
+            <span class="px-2 py-0.5 rounded-full bg-red-950 text-red-300 border border-red-700 font-bold text-[9px] uppercase tracking-wide">
+              🎬 Chọn Suất Chiếu & Ghế Ngồi
+            </span>
+            <span class="text-[10px] text-gray-400 font-semibold"><i class="fa-solid fa-circle-info mr-1 text-cyan-400"></i>Sơ đồ rạp trực quan</span>
+          </div>
+
+          <div class="flex items-start gap-3">
+            ${targetMovie.posterUrl ? `<img src="${escapeChatHTML(targetMovie.posterUrl)}" class="w-14 h-20 rounded-xl object-cover border border-gray-700 shadow flex-shrink-0" alt="Poster">` : ''}
+            <div class="flex-1 min-w-0">
+              <h4 class="text-xs sm:text-sm font-black text-white leading-tight">${escapeChatHTML(targetMovie.title)}</h4>
+              <div class="mt-1 flex flex-wrap gap-1 text-[9px]">
+                <span class="px-1.5 py-0.5 rounded bg-gray-800 text-gray-300 font-medium">${escapeChatHTML(Array.isArray(targetMovie.genres) ? targetMovie.genres.join(", ") : (targetMovie.genres || "Điện ảnh"))}</span>
+                <span class="px-1.5 py-0.5 rounded bg-gray-800 text-yellow-400 font-bold">★ ${targetMovie.imdbRating || '8.0'}</span>
+                <span class="px-1.5 py-0.5 rounded bg-gray-800 text-gray-300 font-mono">${targetMovie.durationMinutes || 120} phút</span>
+              </div>
+              <p class="text-[10px] text-gray-400 mt-1.5 line-clamp-2">${escapeChatHTML(targetMovie.description || "Phim chiếu rạp đặc sắc tại CGV.")}</p>
+            </div>
+          </div>
+
+          ${showtimes.length ? `
+            <div>
+              <span class="text-[10px] text-gray-400 block font-medium mb-1.5">Suất chiếu gợi ý hôm nay (bấm để vào sơ đồ ghế):</span>
+              <div class="grid grid-cols-2 gap-1.5">
+                ${showtimes.map(st => `
+                  <button type="button" onclick="openBookingModal('${escapeChatHTML(targetMovie.id)}')" class="py-1.5 px-2 rounded-lg bg-gray-800 hover:bg-red-900/60 text-gray-200 hover:text-white border border-gray-700 text-[10px] font-semibold transition flex items-center justify-between">
+                    <span><i class="fa-solid fa-clock mr-1 text-cyan-400"></i>${escapeChatHTML(formatShowtime(st.startTime))}</span>
+                    <span class="text-[9px] text-yellow-400 font-bold">${escapeChatHTML(st.format || '2D')}</span>
+                  </button>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <button type="button" onclick="openBookingModal('${escapeChatHTML(targetMovie.id)}')" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cgv-red to-red-700 hover:from-red-600 hover:to-red-800 text-white font-black text-xs transition flex items-center justify-center gap-2 shadow-lg shadow-red-950/60">
+            <i class="fa-solid fa-couch text-sm text-yellow-300"></i>
+            <span>🎟️ Mở Sơ Đồ Rạp & Chọn Ghế Ngay</span>
+          </button>
+        </div>
+      `;
+    }
+
     let revenueHTML = "";
     if (responseData && responseData.revenueData) {
       const rd = responseData.revenueData;
@@ -3999,7 +4306,10 @@ function appendChatMessage(text, sender, suggestedAction = null, responseData = 
       </div>
       <div class="p-3 rounded-2xl rounded-tl-none bg-gray-800 text-gray-200 max-w-[82%] leading-relaxed shadow">
         ${formatChatText(text)}
-        ${actionHTML}
+        ${bookingCardHTML}
+        ${chooseSeatsCardHTML}
+        ${revenueHTML}
+        ${chooseSeatsCardHTML ? "" : actionHTML}
         ${modelBadgeHTML}
       </div>
     `;
@@ -4126,8 +4436,8 @@ function renderDailyKPIs(report) {
   const rEl = document.getElementById("kpi-total-revenue");
   const oEl = document.getElementById("kpi-occupancy");
 
-  if (tEl) tEl.innerText = (kpi.totalTickets || 0).toLocaleString("vi-VN");
-  if (rEl) rEl.innerText = kpi.revenueFormatted || "0 đồng";
+  if (tEl) tEl.innerText = Number(kpi.totalTickets || 0).toLocaleString("vi-VN");
+  if (rEl) rEl.innerText = kpi.revenueFormatted || `${Number(kpi.totalRevenue || 0).toLocaleString("vi-VN")} đ`;
   if (oEl) oEl.innerText = `${kpi.avgOccupancyRate || 0}%`;
 
   const ticketRevEl = document.getElementById("kpi-ticket-revenue");
@@ -4136,25 +4446,30 @@ function renderDailyKPIs(report) {
   const topListEl = document.getElementById("admin-top-movies-list");
 
   const totalRev = Number(kpi.totalRevenue || 0);
-  const ticketRev = Math.round(totalRev * 0.72);
-  const comboRev = Math.round(totalRev * 0.28);
+  const ticketRev = Number(kpi.ticketRevenue !== undefined ? kpi.ticketRevenue : totalRev);
+  const comboRev = Number(kpi.comboRevenue || 0);
 
-  if (ticketRevEl) ticketRevEl.innerText = (report.ticketRevenueFormatted || ticketRev.toLocaleString("vi-VN") + " đ");
-  if (comboRevEl) comboRevEl.innerText = (report.comboRevenueFormatted || comboRev.toLocaleString("vi-VN") + " đ");
-  if (fnbRateEl) fnbRateEl.innerText = `${report.fnbAttachmentRate || 38.5}%`;
+  if (ticketRevEl) ticketRevEl.innerText = `${ticketRev.toLocaleString("vi-VN")} đ`;
+  if (comboRevEl) comboRevEl.innerText = `${comboRev.toLocaleString("vi-VN")} đ`;
+  if (fnbRateEl) fnbRateEl.innerText = `${kpi.fnbAttachmentRate || 0}%`;
 
   if (topListEl) {
-    const defaultTop = [
-      { title: "Dune: Hành Tinh Cát 2", revenue: Math.round(totalRev * 0.45) },
-      { title: "Godzilla x Kong", revenue: Math.round(totalRev * 0.3) },
-      { title: "Kung Fu Panda 4", revenue: Math.round(totalRev * 0.15) }
-    ];
-    const topData = (Array.isArray(report.topMovies) && report.topMovies.length > 0) ? report.topMovies : defaultTop;
-    topListEl.innerHTML = topData.map((m, idx) => `
+    const rawTop = Array.isArray(report.topMovies) ? report.topMovies : [];
+    // Ưu tiên hiển thị các phim có doanh thu thực tế > 0 từ CSDL
+    let topData = rawTop.filter(m => Number(m.revenue || 0) > 0);
+    if (topData.length < 3) {
+      rawTop.forEach(m => {
+        if (!topData.some(t => t.movieId === m.movieId) && topData.length < 3) {
+          topData.push(m);
+        }
+      });
+    }
+
+    topListEl.innerHTML = topData.slice(0, 3).map((m, idx) => `
       <div class="flex items-center justify-between p-2.5 rounded-xl bg-gray-900 border border-gray-800 text-xs">
         <div class="flex items-center gap-2.5">
-          <span class="w-6 h-6 rounded-lg ${idx === 0 ? 'bg-yellow-500 text-black' : 'bg-gray-800 text-gray-300'} font-black flex items-center justify-center text-[11px]">${idx + 1}</span>
-          <span class="font-bold text-white max-w-[150px] truncate">${m.title}</span>
+          <span class="w-6 h-6 rounded-lg ${idx === 0 ? 'bg-yellow-500 text-black font-black' : 'bg-gray-800 text-gray-300 font-bold'} flex items-center justify-center text-[11px]">${idx + 1}</span>
+          <span class="font-bold text-white max-w-[150px] truncate">${escapeChatHTML(m.title)}</span>
         </div>
         <span class="text-cgv-gold font-bold">${Number(m.revenue || 0).toLocaleString("vi-VN")} đ</span>
       </div>

@@ -1,4 +1,5 @@
 const adminAnalyticsAgent = require("../agents/adminAnalyticsAgent");
+const dbService = require("./dbService");
 /**
  * GeminiService — Tích hợp Google Gemini AI Trực Tiếp (Real-time Generative AI)
  * Sử dụng native REST API fetch siêu tốc (~1 giây) với cơ chế chịu lỗi đa mô hình (Multi-model Auto-failover).
@@ -13,7 +14,8 @@ class GeminiService {
       this.primaryModel,
       "gemini-3.5-flash-lite",
       "gemini-flash-lite-latest",
-      "gemini-3.1-flash-lite"
+      "gemini-3.5-flash",
+      "gemini-flash-latest"
     ].filter((m, i, arr) => arr.indexOf(m) === i);
   }
 
@@ -22,6 +24,7 @@ class GeminiService {
    */
   isAvailable() {
     this.apiKey = (process.env.GEMINI_API_KEY || "").trim();
+    this.primaryModel = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
     return Boolean(this.apiKey && this.apiKey.length > 15 && this.apiKey !== "your_gemini_api_key_here");
   }
 
@@ -33,11 +36,11 @@ class GeminiService {
     const available = this.isAvailable();
     return {
       available,
-      provider: "Google Gemini AI (Direct Chat)",
+      provider: "Google Gemini 3.5 Flash Lite (Direct Chat)",
       model: this.primaryModel,
       status: available ? "READY" : "NOT_CONFIGURED",
       hint: available
-        ? "Gemini AI đang hoạt động trực tiếp theo thời gian thực (Real-time Chat)."
+        ? "Gemini 3.5 Flash Lite đang hoạt động trực tiếp theo thời gian thực (Real-time Chat)."
         : "Chưa cấu hình GEMINI_API_KEY trong file backend/.env."
     };
   }
@@ -56,11 +59,27 @@ class GeminiService {
     const todayName = days[now.getDay()];
     const todayStr = `${todayName}, ngày ${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 
-    // 2. Tóm tắt dữ liệu rạp và doanh số bán vé thực tế
-    const salesReport = adminAnalyticsAgent.generateDailyReport(now);
-    const revenueAnalysis = adminAnalyticsAgent.analyzeRevenueByMovie();
-    const topMovies = (revenueAnalysis.breakdown || []).slice(0, 3);
-    // 2. Tóm tắt dữ liệu rạp để cung cấp kiến thức nền cho Gemini
+    // 2. Tóm tắt dữ liệu rạp và doanh số bán vé thực tế từ CSDL
+    let salesReport;
+    try {
+      salesReport = await dbService.getRealAnalyticsReport(now);
+    } catch (e) {
+      salesReport = adminAnalyticsAgent.generateDailyReport(now);
+    }
+    const topMovies = (salesReport?.topMovies || []).slice(0, 3);
+    const kpi = salesReport?.kpi || {};
+    const revFormatted = kpi.revenueFormatted || "0 VNĐ";
+    const totalRev = Number(kpi.totalRevenue || 0).toLocaleString("vi-VN");
+    const totalTickets = kpi.totalTickets || 0;
+    const occRate = kpi.avgOccupancyRate || 65;
+    const occLabel = kpi.avgOccupancyLabel || "Ổn định";
+
+    const topPerformer = salesReport?.topPerformer || {};
+    const topPerfTitle = topPerformer.title || (topMovies[0]?.title) || "Dune: Hành Tinh Cát 2";
+    const topPerfTickets = topPerformer.dailyTickets || topPerformer.tickets || 0;
+    const topPerfRev = Number(topPerformer.dailyRevenue || topPerformer.revenue || 0).toLocaleString("vi-VN");
+
+    // Tóm tắt dữ liệu rạp để cung cấp kiến thức nền cho Gemini
     const movieCatalogText = movies.map(m =>
       `- [${m.id}] ${m.title} (${m.genres ? m.genres.join(", ") : "Điện ảnh"}) | Thời lượng: ${m.durationMinutes || 120}p | IMDb: ${m.imdbRating || 8.0} | Trạng thái: ${m.status === "COMING_SOON" ? "Sắp chiếu" : "Đang chiếu"}`
     ).join("\n");
@@ -69,17 +88,24 @@ class GeminiService {
 Bạn là "Trợ lý ảo AI CGV Cinema 24/7" — một người bạn điện ảnh thông minh, hài hước, thân thiện, lịch thiệp và am hiểu của cụm rạp CGV Cinemas Vietnam.
 
 BÁO CÁO DOANH SỐ & TÌNH HÌNH PHÒNG VÉ CGV:
-- Doanh thu hôm nay: ${salesReport.kpi.revenueFormatted} (${salesReport.kpi.totalRevenue.toLocaleString("vi-VN")} VNĐ)
-- Tổng số vé đã bán hôm nay: ${salesReport.kpi.totalTickets} vé
-- Tỷ lệ lấp đầy phòng chiếu: ${salesReport.kpi.avgOccupancyRate}% (${salesReport.kpi.avgOccupancyLabel})
-- Phim dẫn đầu doanh số: "${salesReport.topPerformer.title}" (${salesReport.topPerformer.dailyTickets} vé hôm nay - ${salesReport.topPerformer.dailyRevenue.toLocaleString("vi-VN")} VNĐ)
+- Doanh thu hôm nay: ${revFormatted} (${totalRev} VNĐ)
+- Tổng số vé đã bán hôm nay: ${totalTickets} vé
+- Tỷ lệ lấp đầy phòng chiếu: ${occRate}% (${occLabel})
+- Phim dẫn đầu doanh số: "${topPerfTitle}" (${topPerfTickets} vé - ${topPerfRev} VNĐ)
 - Top 3 phim doanh số cao nhất:
-  1. ${topMovies[0]?.title}: ${topMovies[0]?.revenueFormatted} (${topMovies[0]?.tickets} vé · ${topMovies[0]?.marketShare} thị phần)
-  2. ${topMovies[1]?.title}: ${topMovies[1]?.revenueFormatted} (${topMovies[1]?.tickets} vé · ${topMovies[1]?.marketShare} thị phần)
-  3. ${topMovies[2]?.title}: ${topMovies[2]?.revenueFormatted} (${topMovies[2]?.tickets} vé · ${topMovies[2]?.marketShare} thị phần)
+  1. ${topMovies[0]?.title || "Dune 2"}: ${topMovies[0]?.revenueFormatted || "0 đ"} (${topMovies[0]?.tickets || 0} vé)
+  2. ${topMovies[1]?.title || "Mai"}: ${topMovies[1]?.revenueFormatted || "0 đ"} (${topMovies[1]?.tickets || 0} vé)
+  3. ${topMovies[2]?.title || "Exhuma"}: ${topMovies[2]?.revenueFormatted || "0 đ"} (${topMovies[2]?.tickets || 0} vé)
 
 KHI NGƯỜI DÙNG HỎI VỀ DOANH SỐ, DOANH THU, TÌNH HÌNH BÁN VÉ, PHIM NÀO BÁN CHẠY:
 - Hãy trả lời chi tiết số liệu, sinh động, văn phong chuyên nghiệp và có thể kèm lời khuyên kinh doanh hoặc đề xuất khách đặt vé xem phim bán chạy nhất.
+
+KHI NGƯỜI DÙNG YÊU CẦU ĐẶT VÉ, MUA VÉ (Ví dụ: "đặt phim...", "đặt vé...", "mua vé...", "đặt vé conan...", "đặt phim thám tử lừng danh..."):
+- TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ TIỆN XUẤT VÉ HAY TỰ BỊA MÃ VÉ VÀ GHẾ NGỒI (vì khách hàng cần tự chọn ngày/giờ chiếu và vị trí ghế yêu thích trên sơ đồ rạp).
+- Hãy chào đón nhiệt tình, xác nhận đúng bộ phim khách muốn xem.
+- Giới thiệu nhanh các khung giờ chiếu phổ biến trong ngày của bộ phim đó (ví dụ: các suất sáng, chiều, tối ở phòng 2D/IMAX).
+- Hướng dẫn khách hàng: "Anh/chị vui lòng bấm nút **'🎟️ Chọn Suất Chiếu & Ghế Ngồi'** ngay bên dưới để chọn giờ chiếu và vị trí ghế yêu thích trên sơ đồ rạp nhé!"
+- TUYỆT ĐỐI KHÔNG tự động chốt ghế ngẫu nhiên hay sinh mã vé CGV-XXXXXX khi khách chưa chọn ghế và chưa xác nhận thanh toán!
 
 THỜI GIAN THỰC TẾ:
 - Hôm nay là: ${todayStr} (giờ Việt Nam). Khi người dùng hỏi hôm nay thứ mấy, ngày bao nhiêu hoặc hỏi về lịch chiếu hôm nay, hãy trả lời chính xác theo ngày này.
@@ -182,9 +208,28 @@ Quy định hoàn vé:
     // Tìm phim nào trong catalog được người dùng hoặc Gemini nhắc đến
     const matchedMovies = movies.filter(m => {
       const titleLower = m.title.toLowerCase();
-      const shortTitle = titleLower.split(":")[0];
-      return normalizedReply.includes(titleLower) || normalizedReply.includes(shortTitle) ||
-             normalizedMsg.includes(titleLower) || normalizedMsg.includes(shortTitle);
+      const shortTitle = titleLower.split(":")[0].trim();
+      const origLower = (m.originalTitle || "").toLowerCase();
+
+      if (normalizedReply.includes(titleLower) || normalizedReply.includes(shortTitle) ||
+          normalizedMsg.includes(titleLower) || normalizedMsg.includes(shortTitle)) {
+        return true;
+      }
+
+      // Xử lý các cụm tìm kiếm như "đặt phim thám tử lừng danh", "mua vé conan"
+      const searchTerms = normalizedMsg
+        .replace(/^(đặt vé|đặt phim|mua vé|mua ve|phim|xem phim|tìm vé|tìm phim)\s+/i, "")
+        .trim();
+      if (searchTerms.length >= 3 && (titleLower.includes(searchTerms) || origLower.includes(searchTerms) || searchTerms.includes(shortTitle))) {
+        return true;
+      }
+
+      const keywords = searchTerms.split(/\s+/).filter(w => w.length >= 3);
+      if (keywords.length >= 2 && keywords.every(kw => titleLower.includes(kw) || origLower.includes(kw))) {
+        return true;
+      }
+
+      return false;
     });
 
     const isBookingIntent = normalizedMsg.includes("đặt") || normalizedMsg.includes("dat") || normalizedMsg.includes("mua vé") || normalizedMsg.includes("mua ve") || normalizedMsg.includes("suất chiếu");
@@ -203,23 +248,27 @@ Quy định hoàn vé:
     let revenueData = null;
     if (isRevenueIntent) {
       revenueData = {
-        totalRevenue: salesReport.kpi.totalRevenue,
-        revenueFormatted: salesReport.kpi.revenueFormatted,
-        totalTickets: salesReport.kpi.totalTickets,
-        avgOccupancyRate: salesReport.kpi.avgOccupancyRate,
-        topPerformer: salesReport.topPerformer,
+        totalRevenue: kpi.totalRevenue || 0,
+        revenueFormatted: revFormatted,
+        totalTickets: totalTickets,
+        avgOccupancyRate: occRate,
+        topPerformer: salesReport?.topPerformer,
         topMovies
       };
     }
 
+    const movieShowtimes = (targetMovie && Array.isArray(showtimes)) ? showtimes.filter(st => st.movieId === targetMovie.id) : [];
+
     return {
-      intent: isRevenueIntent ? "SALES_REPORT" : (targetMovie ? "BOOK_TICKET" : "GEMINI_DIRECT_CHAT"),
+      intent: isRevenueIntent ? "SALES_REPORT" : (targetMovie && isBookingIntent ? "CHOOSE_SHOWTIME_SEAT" : (targetMovie ? "MOVIE_INQUIRY" : "GEMINI_DIRECT_CHAT")),
       confidence: 0.99,
-      model: `Google Gemini (${successfulModel})`,
+      model: `Google Gemini 3.5 Flash Lite (${successfulModel})`,
       replyText: rawReply,
-      action: isRevenueIntent ? "SHOW_REVENUE_REPORT" : (suggestedAction ? "SHOW_BOOKING_CARD" : (matchedMovies.length > 0 ? "SHOW_RECOMMENDATION_CARDS" : "NONE")),
-      suggestedAction: null,
-      suggestedMovies: [],
+      targetMovie: targetMovie,
+      suggestedShowtimes: movieShowtimes.slice(0, 4),
+      action: isRevenueIntent ? "SHOW_REVENUE_REPORT" : (targetMovie && isBookingIntent ? "SHOW_CHOOSE_SEATS_CARD" : (matchedMovies.length > 0 ? "SHOW_RECOMMENDATION_CARDS" : "NONE")),
+      suggestedAction: targetMovie && isBookingIntent ? { type: "BOOKING_MODAL", movieId: targetMovie.id } : null,
+      suggestedMovies: matchedMovies.slice(0, 3),
       revenueData,
       suggestedQuestions: isRevenueIntent ? [
         "Đặt vé phim Dune 2 ngay",
