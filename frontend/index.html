@@ -1752,11 +1752,39 @@
         </button>
       </div>
 
-      <!-- Showtime Selector -->
-      <div class="py-4">
-        <label class="block text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Chọn Suất Chiếu Tại Rạp CGV:</label>
-        <div id="modal-showtimes-container" class="flex flex-wrap gap-2.5">
-          <!-- Rendered by JS -->
+      <!-- Showtime Selector Tinh Gọn Theo Ngày & Rạp (Không Dày Đặc) -->
+      <div class="py-3.5 space-y-3 bg-black/40 p-4 rounded-2xl border border-gray-800 my-2">
+        <!-- 1. Thanh Tabs Ngày Chiếu Trực Quan -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-xs font-black uppercase tracking-wider text-gray-300 flex items-center gap-1.5">
+              <i class="fa-regular fa-calendar-days text-cgv-red"></i> 1. Chọn Ngày Xem Phim:
+            </label>
+            <span id="modal-showtime-count-badge" class="text-[11px] text-gray-400 font-medium"></span>
+          </div>
+          <div id="modal-date-tabs" class="flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+            <!-- Rendered by JS: [ Hôm nay (29/10) ] [ Ngày mai (30/10) ] ... -->
+          </div>
+        </div>
+
+        <!-- 2. Hàng Lọc Cụm Rạp & Khung Suất Chiếu Tinh Gọn -->
+        <div class="pt-2 border-t border-gray-800/80">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+            <label class="text-xs font-black uppercase tracking-wider text-gray-300 flex items-center gap-1.5">
+              <i class="fa-regular fa-clock text-cgv-gold"></i> 2. Chọn Khung Giờ & Phòng Chiếu:
+            </label>
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-gray-400 text-[11px]">Cụm rạp:</span>
+              <select id="modal-cinema-filter" onchange="handleModalCinemaFilterChange(this.value)" class="bg-gray-900 border border-gray-700 text-xs rounded-xl px-3 py-1.5 text-gray-200 focus:outline-none focus:border-red-500">
+                <option value="ALL">Tất cả cụm rạp</option>
+              </select>
+            </div>
+          </div>
+          
+          <!-- Danh sách suất chiếu tinh gọn (chỉ 4-6 suất của ngày đang chọn) -->
+          <div id="modal-showtimes-container" class="flex flex-wrap gap-2.5 pt-1">
+            <!-- Rendered by JS -->
+          </div>
         </div>
       </div>
 

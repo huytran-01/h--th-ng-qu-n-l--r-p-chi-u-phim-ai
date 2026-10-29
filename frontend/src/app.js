@@ -3244,6 +3244,10 @@ function closeConfirmDeleteModal() {
 
 // ==================== BOOKING MODAL & SEAT MAP ==================== //
 
+let modalAllShowtimes = [];
+let modalSelectedDate = "";
+let modalSelectedCinema = "ALL";
+
 async function openBookingModal(movieId) {
   if (currentUser && currentUser.role === "ADMIN") {
     showToast("Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân", "error");
@@ -3264,7 +3268,9 @@ async function openBookingModal(movieId) {
   document.getElementById("checkout-button").disabled = true;
 
   const showtimesContainer = document.getElementById("modal-showtimes-container");
-  showtimesContainer.innerHTML = '<span class="text-xs text-gray-400"><i class="fa-solid fa-spinner animate-spin mr-2 text-cgv-red"></i>Đang tải suất chiếu rạp CGV...</span>';
+  if (showtimesContainer) {
+    showtimesContainer.innerHTML = '<span class="text-xs text-gray-400"><i class="fa-solid fa-spinner animate-spin mr-2 text-cgv-red"></i>Đang tải suất chiếu rạp CGV...</span>';
+  }
 
   document.getElementById("booking-modal").classList.remove("hidden");
 
@@ -3273,10 +3279,35 @@ async function openBookingModal(movieId) {
     const json = await res.json();
 
     if (json.status === "SUCCESS" && json.data.length > 0) {
-      renderShowtimes(json.data);
-      selectShowtime(json.data[0].id);
+      modalAllShowtimes = json.data;
+
+      // Trích xuất các ngày có suất chiếu
+      const dateMap = {};
+      modalAllShowtimes.forEach(st => {
+        if (st.startTime) {
+          const dStr = String(st.startTime).slice(0, 10);
+          dateMap[dStr] = true;
+        }
+      });
+      const uniqueDates = Object.keys(dateMap).sort();
+
+      // Mặc định chọn ngày đầu tiên có suất chiếu
+      modalSelectedDate = uniqueDates[0] || "";
+      modalSelectedCinema = "ALL";
+
+      // Nạp danh sách rạp lọc
+      populateModalCinemaFilter();
+
+      // Render thanh Tabs Ngày Chiếu
+      renderModalDateTabs(uniqueDates);
+
+      // Render danh sách suất chiếu tinh gọn (chỉ hiển thị các suất của ngày đang chọn)
+      renderFilteredShowtimes();
+
     } else {
-      showtimesContainer.innerHTML = '<span class="text-xs text-red-400">Hiện chưa có suất chiếu cho phim này. Vui lòng chọn phim khác.</span>';
+      if (showtimesContainer) {
+        showtimesContainer.innerHTML = '<span class="text-xs text-red-400">Hiện chưa có suất chiếu cho phim này. Vui lòng chọn phim khác.</span>';
+      }
       document.getElementById("seat-map-grid").innerHTML = "";
     }
   } catch (err) {
@@ -3290,22 +3321,152 @@ function closeBookingModal() {
   document.getElementById("lock-countdown-banner").classList.add("hidden");
 }
 
-function renderShowtimes(showtimesList) {
-  const container = document.getElementById("modal-showtimes-container");
+/**
+ * Nạp dropdown lọc cụm rạp trong Modal
+ */
+function populateModalCinemaFilter() {
+  const filterSelect = document.getElementById("modal-cinema-filter");
+  if (!filterSelect) return;
+
+  filterSelect.innerHTML = `<option value="ALL">Tất cả cụm rạp (${allCinemas.length})</option>` +
+    allCinemas.map(c => `<option value="${c.id}">${c.name.replace("CGV ", "")}</option>`).join("");
+  filterSelect.value = "ALL";
+}
+
+/**
+ * Render thanh Tabs ngày chiếu (Hôm nay, Ngày mai, Thứ Bảy...)
+ */
+function renderModalDateTabs(datesList) {
+  const container = document.getElementById("modal-date-tabs");
+  if (!container) return;
   container.innerHTML = "";
 
-  showtimesList.forEach((st, idx) => {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+
+  const dayNames = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+
+  datesList.forEach(dStr => {
+    const parts = dStr.split("-");
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10) - 1;
+    const d = parseInt(parts[2], 10);
+    const dateObj = new Date(y, m, d);
+
+    let label = "";
+    if (dStr === todayStr) {
+      label = `Hôm nay (${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')})`;
+    } else if (dStr === tomorrowStr) {
+      label = `Ngày mai (${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')})`;
+    } else {
+      label = `${dayNames[dateObj.getDay()]} (${String(d).padStart(2, '0')}/${String(m + 1).padStart(2, '0')})`;
+    }
+
+    const isActive = dStr === modalSelectedDate;
     const btn = document.createElement("button");
-    btn.className = `px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-2 border ${idx === 0 ? 'bg-cgv-red text-white border-cgv-red cgv-glow' : 'bg-gray-800 text-gray-300 border-gray-700 hover:border-gray-500'}`;
+    btn.type = "button";
+    btn.id = `modal-date-tab-${dStr}`;
+    btn.className = `px-3.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition flex items-center gap-1.5 ${
+      isActive 
+        ? 'bg-cgv-red text-white shadow-md shadow-red-950/40 ring-1 ring-red-500' 
+        : 'bg-gray-900 border border-gray-800 text-gray-300 hover:border-gray-700 hover:text-white'
+    }`;
+    btn.innerHTML = `<i class="fa-regular fa-calendar-check text-[11px] ${isActive ? 'text-white' : 'text-gray-400'}"></i> <span>${label}</span>`;
+    btn.onclick = () => {
+      modalSelectedDate = dStr;
+      document.querySelectorAll("#modal-date-tabs button").forEach(b => {
+        b.className = "px-3.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition flex items-center gap-1.5 bg-gray-900 border border-gray-800 text-gray-300 hover:border-gray-700 hover:text-white";
+        const icon = b.querySelector("i");
+        if (icon) icon.className = "fa-regular fa-calendar-check text-[11px] text-gray-400";
+      });
+      btn.className = "px-3.5 py-1.5 rounded-xl font-bold whitespace-nowrap transition flex items-center gap-1.5 bg-cgv-red text-white shadow-md shadow-red-950/40 ring-1 ring-red-500";
+      const activeIcon = btn.querySelector("i");
+      if (activeIcon) activeIcon.className = "fa-regular fa-calendar-check text-[11px] text-white";
+
+      renderFilteredShowtimes();
+    };
+
+    container.appendChild(btn);
+  });
+}
+
+function handleModalCinemaFilterChange(cinemaId) {
+  modalSelectedCinema = cinemaId;
+  renderFilteredShowtimes();
+}
+
+/**
+ * Chỉ render các suất chiếu tinh gọn của Ngày đang chọn và Rạp đang chọn
+ * Ẩn bớt toàn bộ hàng chục suất chiếu của các ngày khác
+ */
+function renderFilteredShowtimes() {
+  const container = document.getElementById("modal-showtimes-container");
+  const badgeEl = document.getElementById("modal-showtime-count-badge");
+  if (!container) return;
+  container.innerHTML = "";
+
+  let list = modalAllShowtimes.filter(st => {
+    const stDate = st.startTime ? String(st.startTime).slice(0, 10) : "";
+    return stDate === modalSelectedDate;
+  });
+
+  if (modalSelectedCinema && modalSelectedCinema !== "ALL") {
+    list = list.filter(st => st.room && st.room.cinemaId === modalSelectedCinema);
+  }
+
+  if (badgeEl) {
+    badgeEl.textContent = `Hiển thị ${list.length} suất chiếu`;
+  }
+
+  if (list.length === 0) {
+    container.innerHTML = `
+      <div class="w-full py-4 px-3 rounded-xl bg-gray-900/60 border border-gray-800 text-center text-xs text-gray-400">
+        <i class="fa-solid fa-triangle-exclamation mr-1.5 text-yellow-500"></i>
+        Không có suất chiếu phù hợp cho cụm rạp hoặc ngày này. Vui lòng chọn ngày khác hoặc chọn Tất cả cụm rạp.
+      </div>
+    `;
+    document.getElementById("seat-map-grid").innerHTML = "";
+    return;
+  }
+
+  list.forEach((st, idx) => {
+    const isSelected = selectedShowtime ? selectedShowtime === st.id : idx === 0;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 border ${
+      isSelected 
+        ? 'bg-cgv-red text-white border-cgv-red shadow-lg shadow-red-600/30' 
+        : 'bg-gray-800 hover:bg-gray-700 text-gray-200 border-gray-700'
+    }`;
     btn.id = `showtime-btn-${st.id}`;
     btn.onclick = () => selectShowtime(st.id);
+    
+    const cinemaShortName = st.cinema ? st.cinema.name.replace("CGV ", "").replace("Vincom ", "") : (st.room ? st.room.name : 'Phòng');
+    const formatBadge = st.format ? `<span class="px-1.5 py-0.5 rounded text-[9px] font-black uppercase ${st.format === 'IMAX' ? 'bg-amber-950 text-amber-300 border border-amber-700/60' : (st.format === 'SCREENX' ? 'bg-purple-950 text-purple-300 border border-purple-700/60' : 'bg-gray-900 text-cyan-300')}">${st.format}</span>` : '';
+
     btn.innerHTML = `
-      <i class="fa-regular fa-clock"></i>
-      <span>${formatShowtime(st.startTime)}</span>
-      <span class="text-[10px] font-normal opacity-80">(${st.cinema ? st.cinema.name.replace("CGV ", "") : (st.room ? st.room.name : 'Phòng')})</span>
+      <i class="fa-regular fa-clock text-xs"></i>
+      <span class="font-mono text-sm">${formatShowtime(st.startTime)}</span>
+      ${formatBadge}
+      <span class="text-[11px] font-medium opacity-80 text-gray-300">(${cinemaShortName})</span>
     `;
     container.appendChild(btn);
   });
+
+  // Tự động chọn suất đầu tiên nếu chưa chọn hoặc suất cũ không nằm trong danh sách lọc
+  const hasCurrent = list.some(st => st.id === selectedShowtime);
+  if (!hasCurrent && list.length > 0) {
+    selectShowtime(list[0].id);
+  }
+}
+
+function renderShowtimes(showtimesList) {
+  modalAllShowtimes = showtimesList;
+  renderFilteredShowtimes();
 }
 
 async function selectShowtime(showtimeId) {
