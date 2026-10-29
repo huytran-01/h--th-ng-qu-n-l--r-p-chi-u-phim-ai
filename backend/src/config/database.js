@@ -15,7 +15,9 @@ const DB_CONFIG = {
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  charset: "utf8mb4"
+  charset: "utf8mb4",
+  timezone: "+07:00",
+  dateStrings: true
 };
 
 let pool = null;

@@ -119,6 +119,19 @@ class SeatLockService {
     return { success: true, message: "Xác nhận đặt vé thành công" };
   }
 
+  // Đánh dấu ghế đã bán trực tiếp (Hỗ trợ AI Booking hoặc API đối tác)
+  markSeatsBooked(showtimeId, seatIds) {
+    if (!this.bookedSeats.has(showtimeId)) {
+      this.bookedSeats.set(showtimeId, new Set());
+    }
+    const confirmedSeats = this.bookedSeats.get(showtimeId);
+    for (const seatId of seatIds) {
+      confirmedSeats.add(seatId);
+      this.lockedSeats.delete(`${showtimeId}:${seatId}`);
+    }
+    return { success: true };
+  }
+
   // Lấy trạng thái tất cả các ghế của 1 ca chiếu
   getSeatsStatus(showtimeId, currentUserId) {
     this.cleanExpiredLocks();

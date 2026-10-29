@@ -21,6 +21,7 @@ try {
 }
 
 const { showtimes, movies, rooms, defaultSeats } = require("../src/data/mockData");
+const dbService = require("../src/services/dbService");
 
 const RESULTS = [];
 let passCount = 0;
@@ -125,6 +126,11 @@ async function runAllTests() {
     });
   });
 
+  // Đợi server và CSDL MySQL hoàn tất đồng bộ 100% trước khi chạy test
+  if (app && app.waitForDatabase) {
+    await app.waitForDatabase();
+  }
+
   // Thiết lập Suất chiếu test cho 3 mốc hoàn vé: > 24h, 2h-24h, < 2h
   const now = Date.now();
   const stFuture = {
@@ -155,6 +161,11 @@ async function runAllTests() {
     format: "2D"
   };
   showtimes.push(stFuture, stMid, stPast);
+  try {
+    await dbService.createShowtime(stFuture);
+    await dbService.createShowtime(stMid);
+    await dbService.createShowtime(stPast);
+  } catch (e) {}
 
   let customerToken = "";
   let customerUser = null;
@@ -699,20 +710,27 @@ async function runAllTests() {
   });
 
   await runTestCase("TC-ADM-02", "Admin tạo mới suất chiếu cho phim vừa tạo (CRUD Showtime)", async () => {
+    const uniqueDay = new Date(Date.now() + 60 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const oldStIdx = showtimes.findIndex(st => st.startTime && st.startTime.startsWith(uniqueDay) && st.roomId === "room-01");
+    if (oldStIdx !== -1) {
+      const oldSt = showtimes.splice(oldStIdx, 1)[0];
+      await dbService.deleteShowtime(oldSt.id).catch(() => {});
+    }
+
     const res = await apiRequest("/admin/showtimes", {
       method: "POST",
       headers: { "Authorization": `Bearer ${adminToken}` },
       body: {
         movieId: createdMovieId,
         roomId: "room-01",
-        startTime: "2026-11-01T20:00:00+07:00",
-        endTime: "2026-11-01T23:15:00+07:00",
+        startTime: `${uniqueDay}T20:00:00+07:00`,
+        endTime: `${uniqueDay}T23:15:00+07:00`,
         price: 180000,
         format: "IMAX"
       }
     });
     const json = await res.json();
-    assert(res.status === 201, `Expected 201, got ${res.status}`);
+    assert(res.status === 201, `Expected 201, got ${res.status}: ${JSON.stringify(json)}`);
     assert(json.data.id && json.data.id.startsWith("st-"), "Invalid showtime id");
     return `Đã tạo suất chiếu ${json.data.id} phòng room-01 định dạng IMAX`;
   });
@@ -750,6 +768,121 @@ async function runAllTests() {
   });
 
   // =========================================================================
+  // SUITE 8: TÁCH BIỆT GIAO DIỆN & PHÂN QUYỀN 3 VAI TRÒ (ROLE-BASED UI & RBAC ISOLATION)
+  // =========================================================================
+  console.log(`\n${colors.bold}${colors.magenta}🛡️ PHÂN HỆ 8: TÁCH BIỆT GIAO DIỆN & PHÂN QUYỀN 3 VAI TRÒ (ROLE-BASED UI & RBAC ISOLATION)${colors.reset}`);
+
+  await runTestCase("TC_UI_ROLE_01", "Role Isolation Khách hàng (CUSTOMER) -> Cô lập hoàn toàn POS & Admin", async () => {
+    // 1. Khách hàng gọi API soát vé POS của Staff -> Bị chặn 403
+    const resCheckIn = await apiRequest("/bookings/check-in", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${customerToken}` },
+      body: { code: "CGV-123456" }
+    });
+    assert(resCheckIn.status === 403, `Customer check-in must return 403, got ${resCheckIn.status}`);
+
+    // 2. Khách hàng gọi API quản trị Users của Admin -> Bị chặn 403
+    const resUsers = await apiRequest("/admin/users", {
+      headers: { "Authorization": `Bearer ${customerToken}` }
+    });
+    assert(resUsers.status === 403, `Customer manage users must return 403, got ${resUsers.status}`);
+
+    // 3. Khách hàng gọi API quản trị Movies của Admin -> Bị chặn 403
+    const resAdminMovies = await apiRequest("/admin/movies", {
+      headers: { "Authorization": `Bearer ${customerToken}` }
+    });
+    assert(resAdminMovies.status === 403, `Customer admin movies must return 403, got ${resAdminMovies.status}`);
+
+    return "Customer bị chặn 403 toàn diện khi truy cập POS Check-in, Admin Users & Admin Movies";
+  });
+
+  await runTestCase("TC_UI_ROLE_02", "Role Isolation Nhân viên rạp (STAFF) -> Ẩn đặt vé khách & Chặn CRUD Admin", async () => {
+    // 1. Staff gọi API CRUD Movies của Admin -> Bị chặn 403
+    const resMovie = await apiRequest("/admin/movies", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${staffToken}` },
+      body: { title: "Staff Illegal Movie" }
+    });
+    assert(resMovie.status === 403, `Staff create movie must return 403, got ${resMovie.status}`);
+
+    // 2. Staff gọi API CRUD Showtimes của Admin -> Bị chặn 403
+    const resShowtime = await apiRequest("/admin/showtimes", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${staffToken}` },
+      body: { movieId: "mov-01", roomId: "room-01", startTime: new Date().toISOString() }
+    });
+    assert(resShowtime.status === 403, `Staff create showtime must return 403, got ${resShowtime.status}`);
+
+    // 3. Staff gọi API Báo cáo KPI của Admin -> Bị chặn 403
+    const resReport = await apiRequest("/admin/daily-report", {
+      headers: { "Authorization": `Bearer ${staffToken}` }
+    });
+    assert(resReport.status === 403, `Staff view daily-report must return 403, got ${resReport.status}`);
+
+    // 4. Staff gọi API AI Forecast của Admin -> Bị chặn 403
+    const resForecast = await apiRequest("/ai/demand-forecast", {
+      headers: { "Authorization": `Bearer ${staffToken}` }
+    });
+    assert(resForecast.status === 403, `Staff view demand-forecast must return 403, got ${resForecast.status}`);
+
+    return "Staff bị chặn 403 toàn diện khi cố truy cập Movie CRUD, Showtime CRUD, KPI & AI Forecast";
+  });
+
+  await runTestCase("TC_UI_ROLE_03", "Role Isolation Quản trị viên (ADMIN) -> Chặn mua vé cá nhân Admin", async () => {
+    const expectedMsg = "Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân";
+
+    // 1. Admin gọi API khóa ghế đặt vé cá nhân -> Bị chặn 403 với thông báo chuẩn
+    const resLock = await apiRequest("/bookings/lock-seats", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${adminToken}` },
+      body: { showtimeId: "st-101", seatIds: ["C1"], userId: "admin_001" }
+    });
+    const jsonLock = await resLock.json();
+    assert(resLock.status === 403, `Admin lock-seats must return 403, got ${resLock.status}`);
+    assert(jsonLock.message === expectedMsg, `Expected exact message, got "${jsonLock.message}"`);
+
+    // 2. Admin gọi API checkout thanh toán vé cá nhân -> Bị chặn 403 với thông báo chuẩn
+    const resCheckout = await apiRequest("/payments/checkout", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${adminToken}` },
+      body: { showtimeId: "st-101", seatIds: ["C1"], userId: "admin_001" }
+    });
+    const jsonCheckout = await resCheckout.json();
+    assert(resCheckout.status === 403, `Admin checkout must return 403, got ${resCheckout.status}`);
+    assert(jsonCheckout.message === expectedMsg, `Expected exact message, got "${jsonCheckout.message}"`);
+
+    return "Admin bị chặn 403 khi đặt vé cá nhân kèm đúng thông báo: 'Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân'";
+  });
+
+  await runTestCase("TC_ADM_SHOWTIME_CONFLICT", "Admin tạo suất chiếu -> Kiểm tra chống trùng giờ chiếu cùng phòng", async () => {
+    // 1. Lấy thông tin một suất chiếu đã có sẵn tại room-01
+    const baseShowtime = showtimes.find(st => st.roomId === "room-01");
+    assert(baseShowtime, "Must have at least one showtime in room-01");
+
+    // 2. Thử tạo một suất chiếu mới tại room-01 với khung giờ bị trùng (overlap)
+    const conflictStart = new Date(new Date(baseShowtime.startTime).getTime() + 15 * 60 * 1000).toISOString(); // Bắt đầu sau 15 phút
+    const conflictEnd = new Date(new Date(baseShowtime.startTime).getTime() + 120 * 60 * 1000).toISOString();
+
+    const res = await apiRequest("/admin/showtimes", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${adminToken}` },
+      body: {
+        movieId: "mov-01",
+        roomId: "room-01",
+        startTime: conflictStart,
+        endTime: conflictEnd,
+        price: 130000
+      }
+    });
+    const json = await res.json();
+    assert(res.status === 400, `Expected 400 Bad Request for showtime conflict, got ${res.status}`);
+    assert(json.status === "ERROR", "Status must be ERROR");
+    assert(json.message.includes("đã có suất chiếu khác trong khoảng thời gian đã chọn"), "Error message must indicate room time conflict");
+
+    return `Chống trùng giờ thành công: "${json.message}"`;
+  });
+
+  // =========================================================================
   // TỔNG KẾT VÀ XUẤT KẾT QUẢ
   // =========================================================================
   console.log("\n" + "=".repeat(75));
@@ -768,13 +901,7 @@ async function runAllTests() {
     "utf8"
   );
 
-  testServer.close();
-
-  if (failCount > 0) {
-    process.exit(1);
-  } else {
-    process.exit(0);
-  }
+  process.exit(failCount > 0 ? 1 : 0);
 }
 
 runAllTests().catch(err => {

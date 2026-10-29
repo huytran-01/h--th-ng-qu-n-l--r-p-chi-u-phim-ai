@@ -3,7 +3,7 @@
  * Chức năng: Xử lý hoàn vé, tra cứu đặt vé, phân loại khiếu nại, chuyển nhân viên
  */
 
-const { bookings, movies, showtimes } = require("../data/mockData");
+const { bookings, movies, showtimes, rooms, cinemas } = require("../data/mockData");
 
 // Chính sách hoàn vé theo thời gian còn lại đến suất chiếu
 const REFUND_POLICIES = {
@@ -92,11 +92,30 @@ class CustomerServiceAgent {
     }
 
     // Kiểm tra trạng thái thanh toán
-    if (booking.paymentStatus !== "PAID") {
+    if (booking.paymentStatus !== "PAID" && !customerInfo.forceOverride) {
       return {
         success: false,
         error: "INVALID_STATUS",
         message: "Vé chưa thanh toán hoặc đã được hoàn trước đó.",
+      };
+    }
+
+    // Xử lý quyền can thiệp đặc biệt của Nhân viên / Quản lý rạp (Staff / Admin Override)
+    if (customerInfo && (customerInfo.forceOverride || customerInfo.isStaffOverride)) {
+      return {
+        success: true,
+        bookingCode,
+        movieTitle: booking.movieTitle,
+        originalAmount: booking.totalAmount,
+        refundPolicy: "Quyền Nhân Viên / Hủy Vé Ngoại Lệ Tại Quầy POS",
+        approved: true,
+        refundAmount: customerInfo.refundAmount !== undefined ? customerInfo.refundAmount : booking.totalAmount,
+        refundRate: customerInfo.refundRate || "100%",
+        processingTime: "Xử lý ngay tại quầy",
+        note: "Đã duyệt hủy vé và mở lại ghế thành công theo quyền vận hành của nhân viên rạp.",
+        refundMethod: "Hủy vé tại quầy POS",
+        caseId: `REFUND-${Date.now().toString().slice(-6)}`,
+        reason: reason || "Nhân viên rạp hỗ trợ hủy vé",
       };
     }
 
@@ -108,6 +127,12 @@ class CustomerServiceAgent {
     const isForceCase = this._isSpecialCase(reason);
     const finalPolicy = isForceCase ? REFUND_POLICIES.SPECIAL_CASE : policy;
     const finalRefund = Math.round(booking.totalAmount * finalPolicy.refundRate);
+
+    // Cập nhật trạng thái nếu là booking trong MOCK_BOOKING_DB
+    if (MOCK_BOOKING_DB[bookingCode]) {
+      MOCK_BOOKING_DB[bookingCode].paymentStatus = "REFUNDED";
+      MOCK_BOOKING_DB[bookingCode].status = "REFUNDED";
+    }
 
     return {
       success: true,
@@ -226,19 +251,35 @@ class CustomerServiceAgent {
   // ==================== PRIVATE HELPERS ==================== //
 
   _findBooking(bookingCode) {
-    if (MOCK_BOOKING_DB[bookingCode]) return MOCK_BOOKING_DB[bookingCode];
+    if (MOCK_BOOKING_DB[bookingCode]) {
+      const mb = MOCK_BOOKING_DB[bookingCode];
+      return {
+        ...mb,
+        total: mb.totalAmount,
+        status: mb.paymentStatus,
+        roomName: "Phòng 01 - IMAX Laser",
+        cinemaName: "CGV Vincom Landmark 81"
+      };
+    }
     const storedBooking = bookings.find(item => item.bookingCode === bookingCode);
     if (!storedBooking) return null;
     const movie = movies.find(item => item.id === storedBooking.movieId);
     const showtime = showtimes.find(item => item.id === storedBooking.showtimeId);
+    const room = showtime ? rooms.find(r => r.id === showtime.roomId) : null;
+    const cinema = room ? cinemas.find(c => c.id === room.cinemaId) : null;
     return {
       bookingCode: storedBooking.bookingCode,
       movieTitle: movie?.title || "Phim chiếu rạp",
       showtimeStart: showtime?.startTime || storedBooking.bookedAt,
-      seats: storedBooking.seats,
+      seats: storedBooking.seats || [],
+      roomId: showtime?.roomId || null,
+      roomName: room ? room.name : (showtime ? `Phòng ${showtime.roomId}` : "Phòng 01 - IMAX Laser"),
+      cinemaName: cinema ? cinema.name : "CGV Cinemas",
       customerName: "Khách hàng AI Cinema",
       customerPhone: "0987654321",
-      totalAmount: storedBooking.total,
+      total: storedBooking.total || storedBooking.totalAmount || 0,
+      totalAmount: storedBooking.total || storedBooking.totalAmount || 0,
+      status: storedBooking.status || "PAID",
       paymentStatus: storedBooking.status === "PAID" ? "PAID" : storedBooking.status,
       bookedAt: storedBooking.bookedAt,
     };
@@ -255,10 +296,15 @@ class CustomerServiceAgent {
     return REFUND_POLICIES.LESS_THAN_2H;
   }
 
-  /** Kiểm tra trường hợp đặc biệt (force majeure, lỗi hệ thống) */
+  /** Kiểm tra trường hợp đặc biệt (force majeure, lỗi hệ thống, sự cố rạp, bệnh đột xuất) */
   _isSpecialCase(reason) {
-    const specialKeywords = ["lỗi hệ thống", "sự cố kỹ thuật", "rạp hủy", "tai nạn", "cấp cứu", "thiên tai"];
-    return specialKeywords.some(kw => reason.toLowerCase().includes(kw));
+    if (!reason) return false;
+    const specialKeywords = [
+      "lỗi hệ thống", "sự cố kỹ thuật", "rạp hủy", "tai nạn", "cấp cứu", "thiên tai",
+      "sự cố", "kỹ thuật", "lỗi rạp", "máy chiếu", "mất điện", "bệnh", "đột xuất", "sức khỏe"
+    ];
+    const lower = reason.toLowerCase();
+    return specialKeywords.some(kw => lower.includes(kw));
   }
 
   /** Phân loại khiếu nại theo nội dung */

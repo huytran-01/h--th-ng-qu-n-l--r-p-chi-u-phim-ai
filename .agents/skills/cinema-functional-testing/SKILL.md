@@ -42,7 +42,7 @@ Skill này định nghĩa toàn bộ kiến trúc đối chiếu và quy trình 
 | Nhóm Chức Năng / API Endpoint | Khách hàng (`CUSTOMER`) | Nhân viên (`STAFF` / `MANAGER`) | Quản trị viên (`ADMIN`) |
 |---|:---:|:---:|:---:|
 | Đăng ký, Đăng nhập, Xem danh mục phim & Lịch chiếu | ✅ Cho phép | ✅ Cho phép | ✅ Cho phép |
-| Khóa ghế TTL 10 phút, Chọn Combo F&B, Thanh toán QR | ✅ Cho phép | ✅ Cho phép | ✅ Cho phép |
+| Đặt vé cá nhân, Khóa ghế 10p, Thanh toán QR (`lock-seats`, `checkout`) | ✅ Cho phép | ✅ Cho phép | ❌ Chặn (`403` - Điều hành hệ thống) |
 | Xem hồ sơ cá nhân, Thẻ CGV Membership, AI Chat & Gợi ý phim | ✅ Cho phép | ✅ Cho phép | ✅ Cho phép |
 | Tra cứu toàn bộ lịch sử đơn vé tại rạp (`GET /api/v1/admin/bookings`) | ❌ Chặn (`403`) | ✅ Cho phép | ✅ Cho phép |
 | Quét mã QR / Soát vé Check-in (`POST /api/v1/bookings/check-in`) | ❌ Chặn (`403`) | ✅ Cho phép | ✅ Cho phép |
@@ -50,6 +50,35 @@ Skill này định nghĩa toàn bộ kiến trúc đối chiếu và quy trình 
 | Quản lý Suất chiếu & Phòng chiếu - CRUD (`/api/v1/admin/showtimes`) | ❌ Chặn (`403`) | ❌ Chặn (`403`) | ✅ Cho phép |
 | Quản lý Người dùng & Cấp quyền RBAC (`/api/v1/admin/users`) | ❌ Chặn (`403`) | ❌ Chặn (`403`) | ✅ Cho phép |
 | Xem Báo cáo KPI & Phê duyệt Lịch chiếu AI (`/api/v1/admin/*`) | ❌ Chặn (`403`) | ❌ Chặn (`403`) | ✅ Cho phép |
+
+### 2.1. Nhóm Kịch Bản Kiểm Thử Tách Biệt Giao Diện & Phân Quyền (Role-Based UI & RBAC Isolation)
+
+1. **`TC_UI_ROLE_01`: Kiểm thử Vai trò Khách hàng (`CUSTOMER`)**
+   - **Mục tiêu:** Xác nhận giao diện chỉ hiển thị Customer Portal, cô lập hoàn toàn màn hình nghiệp vụ POS và Admin.
+   - **Quy trình:**
+     + Đăng nhập tài khoản `CUSTOMER` (`customer@aicinema.vn`).
+     + Hệ thống điều hướng vào `home-view`.
+     + Hiển thị: Hero Banner, Quick Booking bar, Catalog phim & bộ lọc, sơ đồ chọn ghế, combo bắp nước, hồ sơ thẻ CGV, AI studio và AI chatbot 24/7.
+     + Ẩn hoàn toàn: Quầy soát vé POS (`staff-view`), Dashboard Admin (`admin-view`), các nút điều hướng Staff/Admin trên Header & Dropdown menu.
+     + Kiểm tra ranh giới API: Gọi `POST /api/v1/bookings/check-in` và `GET /api/v1/admin/users` bị chặn với HTTP 403 Forbidden.
+
+2. **`TC_UI_ROLE_02`: Kiểm thử Vai trò Nhân viên rạp (`STAFF` Workspace)**
+   - **Mục tiêu:** Xác nhận khi Staff đăng nhập, hệ thống tự động điều hướng vào Staff POS Portal, ẩn giao diện giải trí của khách và chặn truy cập Admin.
+   - **Quy trình:**
+     + Đăng nhập tài khoản `STAFF` (`minhanh@aicinema.vn`).
+     + Hệ thống tự động chuyển thẳng vào `staff-view` (Quầy Vận Hành & Soát Vé).
+     + Ẩn hoàn toàn: Hero Banner, Quick Booking Bar, Catalog phim của khách, AI Recommendation Studio và Chatbot khách hàng.
+     + Thanh điều hướng hiển thị 3 nghiệp vụ chuyên trách: (1) Quét QR / Soát vé Check-in, (2) Tra cứu Lịch sử Đơn vé (10 vé/trang), (3) Hỗ trợ Hoàn/Hủy vé tự động (`CustomerServiceAgent`).
+     + Kiểm tra ranh giới API: Gọi `POST /api/v1/admin/movies`, `POST /api/v1/admin/showtimes`, `GET /api/v1/admin/daily-report` bị chặn với HTTP 403 Forbidden.
+
+3. **`TC_UI_ROLE_03`: Kiểm thử Vai trò Quản trị viên (`ADMIN` Workspace)**
+   - **Mục tiêu:** Xác nhận khi Admin đăng nhập, hệ thống tự động điều hướng vào Admin Back-Office Dashboard, ẩn giao diện đặt vé cá nhân và chặn mua vé bằng tài khoản Admin.
+   - **Quy trình:**
+     + Đăng nhập tài khoản `ADMIN` (`admin@aicinema.vn`).
+     + Hệ thống tự động chuyển thẳng vào `admin-view` (Trung tâm Quản trị Hệ thống).
+     + Ẩn hoàn toàn giao diện đặt vé cá nhân của khách hàng.
+     + Thanh điều hướng hiển thị 5 phân hệ cốt lõi: (1) Dashboard Báo cáo KPI, (2) Quản lý Phim CRUD, (3) Quản lý Suất chiếu CRUD & Chống trùng giờ, (4) Quản lý Người dùng & RBAC, (5) AI Analytics & Dự báo LightGBM.
+     + Kiểm tra ranh giới API: Gọi `POST /api/v1/bookings/lock-seats` hoặc `POST /api/v1/payments/checkout` bằng token Admin bị chặn với HTTP 403 Forbidden kèm thông báo: *"Tài khoản Quản trị viên chỉ dùng cho mục đích điều hành hệ thống, không thực hiện đặt vé cá nhân"*.
 
 ---
 

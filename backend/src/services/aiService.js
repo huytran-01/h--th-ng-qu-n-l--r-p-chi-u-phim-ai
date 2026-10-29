@@ -483,14 +483,23 @@ class AIService {
     if (detectedMovie || normalizedMessage.includes("dat ve") || normalizedMessage.includes("mua ve") || normalizedMessage.includes("suat chieu")) {
       const targetMovie = detectedMovie || movies[0];
       const availableShowtimes = showtimes.filter(st => st.movieId === targetMovie.id);
+      const sampleTimes = availableShowtimes.slice(0, 4).map(s => {
+        if (!s.startTime) return "19:30";
+        if (s.startTime.includes("T")) return s.startTime.split("T")[1].slice(0, 5);
+        if (s.startTime.includes(" ")) return s.startTime.split(" ")[1].slice(0, 5);
+        return s.startTime.slice(-8, -3);
+      });
 
       return {
-        intent: "BOOK_TICKET",
-        confidence: 0.96,
-        replyText: `🎬 Tìm thấy **${availableShowtimes.length}** suất chiếu cho phim **${targetMovie.title}** (${hallFormat}). Bấm vào suất chiếu bên dưới để chọn ghế ngay!`,
+        intent: "CHOOSE_SHOWTIME_SEAT",
+        confidence: 0.98,
+        replyText: `🎬 Dạ, em đã sẵn sàng hỗ trợ anh/chị đặt vé xem phim **${targetMovie.title}**!\n\n` +
+          `Các suất chiếu gần nhất hôm nay: **${sampleTimes.join(" • ") || "10:30 • 15:00 • 18:15"}** (${hallFormat}).\n\n` +
+          `Để đảm bảo chọn đúng giờ xem và vị trí ghế yêu thích, anh/chị vui lòng bấm nút **"🎟️ Chọn Suất Chiếu & Ghế Ngồi"** bên dưới để mở sơ đồ rạp và giữ chỗ ngay nhé! 🍿✨`,
         extractedEntities: { movie: targetMovie, ticketQuantity: ticketQty, hallFormat },
-        suggestedShowtimes: availableShowtimes,
-        action: "SHOW_BOOKING_CARD",
+        suggestedShowtimes: availableShowtimes.slice(0, 4),
+        targetMovie: targetMovie,
+        action: "SHOW_CHOOSE_SEATS_CARD",
       };
     }
 
