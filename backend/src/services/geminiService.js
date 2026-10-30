@@ -163,7 +163,7 @@ Quy định hoàn vé:
       try {
         console.log(`[GeminiService] Đang kết nối trực tiếp với Google Gemini (${modelToTry})...`);
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelToTry}:generateContent?key=${this.apiKey}`;
-        
+
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 35000); // 35 giây timeout
 
@@ -212,7 +212,7 @@ Quy định hoàn vé:
       const origLower = (m.originalTitle || "").toLowerCase();
 
       if (normalizedReply.includes(titleLower) || normalizedReply.includes(shortTitle) ||
-          normalizedMsg.includes(titleLower) || normalizedMsg.includes(shortTitle)) {
+        normalizedMsg.includes(titleLower) || normalizedMsg.includes(shortTitle)) {
         return true;
       }
 
